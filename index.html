@@ -1,0 +1,1898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bookmarks Browser</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    animation: {
+                        'slide-in-right': 'slideInRight 0.35s cubic-bezier(0.4,0,0.2,1)',
+                        'slide-in-up': 'slideInUp 0.3s ease',
+                        'fade-in': 'fadeIn 0.2s ease',
+                        'bounce-in': 'bounceIn 0.4s cubic-bezier(0.68,-0.55,0.27,1.55)',
+                        'toast-in': 'toastIn 0.3s ease',
+                    },
+                    keyframes: {
+                        slideInRight: { from:{ transform:'translateX(100%)' }, to:{ transform:'translateX(0)' } },
+                        slideInUp: { from:{ transform:'translateY(16px)', opacity:'0' }, to:{ transform:'translateY(0)', opacity:'1' } },
+                        fadeIn: { from:{ opacity:'0', transform:'scale(0.96)' }, to:{ opacity:'1', transform:'scale(1)' } },
+                        bounceIn: { '0%':{ transform:'scale(0.7)', opacity:'0' }, '60%':{ transform:'scale(1.05)' }, '100%':{ transform:'scale(1)', opacity:'1' } },
+                        toastIn: { from:{ transform:'translateX(110px)', opacity:'0' }, to:{ transform:'translateX(0)', opacity:'1' } },
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        :root {
+            --accent: #6366f1;
+            --accent-h: #4f46e5;
+            --widget-bg: rgba(31,41,55,0.92);
+            --widget-blur: 12px;
+            --widget-border: rgba(255,255,255,0.07);
+            --widget-radius: 16px;
+            --nav-bg: rgba(17,24,39,0.95);
+        }
+        * { box-sizing: border-box; margin:0; padding:0; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg,#1a1a2e,#0f3460);
+            min-height: 100vh;
+            background-attachment: fixed;
+        }
+        body.bg-image {
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+
+        /* Widget Card */
+        .wcard {
+            background: var(--widget-bg);
+            backdrop-filter: blur(var(--widget-blur));
+            border: 1px solid var(--widget-border);
+            border-radius: var(--widget-radius);
+            transition: transform .2s, box-shadow .2s;
+        }
+        .wcard:hover { transform: translateY(-2px); box-shadow: 0 14px 40px rgba(0,0,0,.4); }
+
+        /* Navbar */
+        .navbar {
+            background: var(--nav-bg);
+            backdrop-filter: blur(16px);
+            border-bottom: 1px solid rgba(255,255,255,.06);
+        }
+
+        /* Settings panel */
+        .spanel {
+            transform: translateX(100%);
+            transition: transform .35s cubic-bezier(.4,0,.2,1);
+            will-change: transform;
+        }
+        .spanel.open { transform: translateX(0); }
+
+        /* Scrollbars */
+        ::-webkit-scrollbar { width:4px; height:4px; }
+        ::-webkit-scrollbar-track { background:transparent; }
+        ::-webkit-scrollbar-thumb { background:#374151; border-radius:99px; }
+        .noscroll::-webkit-scrollbar { display:none; }
+
+        /* Toggle */
+        .tgl:checked + .tgl-lbl { background: var(--accent); }
+        .tgl:checked + .tgl-lbl::after { transform: translateX(18px); }
+        .tgl-lbl {
+            display:block; width:40px; height:22px; border-radius:99px;
+            background:#374151; cursor:pointer; position:relative; transition:background .3s;
+        }
+        .tgl-lbl::after {
+            content:''; position:absolute; top:3px; left:3px;
+            width:16px; height:16px; border-radius:50%;
+            background:#fff; transition:transform .3s;
+        }
+
+        /* Accent helpers */
+        .acc-bg  { background-color: var(--accent) !important; }
+        .acc-txt { color: var(--accent) !important; }
+        .acc-bdr { border-color: var(--accent) !important; }
+
+        /* Search glow */
+        .srch:focus-within {
+            box-shadow: 0 0 0 2px var(--accent), 0 0 30px color-mix(in srgb,var(--accent) 25%,transparent);
+        }
+
+        /* Nav active */
+        .nav-act { color:#fff !important; border-bottom-color: var(--accent) !important; }
+
+        /* Range */
+        input[type=range]  { accent-color: var(--accent); }
+        input[type=color]  { cursor:pointer; }
+
+        /* Card hover actions */
+        .cactions { opacity:0; transition:opacity .2s; }
+        .wcard:hover .cactions { opacity:1; }
+        .bm-row:hover .bm-del { opacity:1; }
+        .bm-del { opacity:0; transition:opacity .2s; }
+
+        /* Grid item */
+        .gi:hover .gi-icon { transform:scale(1.12); }
+        .gi-icon { transition:transform .2s; }
+
+        /* Emoji picker */
+        .epicker { display:none; }
+        .epicker.open { display:grid; }
+
+        /* Active states */
+        .opt-act {
+            background: color-mix(in srgb,var(--accent) 18%,transparent) !important;
+            color: var(--accent) !important;
+            border-color: var(--accent) !important;
+        }
+
+        /* Preset selected */
+        .bg-sel  { border-color: var(--accent) !important; box-shadow: 0 0 12px color-mix(in srgb,var(--accent) 45%,transparent); }
+        .acc-sel { border-color: #fff !important; box-shadow: 0 0 8px rgba(255,255,255,.4); }
+
+        /* Modal */
+        .modal-bd { backdrop-filter:blur(6px); }
+
+        /* Section title */
+        .stitle {
+            font-size:.68rem; font-weight:700; letter-spacing:.12em;
+            text-transform:uppercase; color:var(--accent);
+            padding-bottom:.4rem; border-bottom:1px solid rgba(255,255,255,.06);
+            margin-bottom:.75rem;
+        }
+
+        /* Tabs */
+        .tab-btn.tab-act { background:color-mix(in srgb,var(--accent) 18%,transparent); color:var(--accent); border-color:var(--accent); }
+
+        /* Drag ghost */
+        .dragging { opacity:.4; }
+
+        /* Light theme */
+        body.lt .wcard  { --widget-bg:rgba(255,255,255,.88); --widget-border:rgba(0,0,0,.07); }
+        body.lt .navbar { background:rgba(255,255,255,.92) !important; border-color:rgba(0,0,0,.08) !important; }
+        body.lt .bm-link { color:#374151; }
+        body.lt .bm-link:hover { background:rgba(0,0,0,.05); color:#111; }
+        body.lt .card-ttl { color:#1a202c; }
+        body.lt .nav-btn  { color:#4b5563; }
+        body.lt .gi-lbl   { color:#4b5563; }
+    </style>
+</head>
+<body>
+
+<!-- BG Overlay -->
+<div id="bgOv" class="fixed inset-0 pointer-events-none z-0 transition-all duration-500" style="background:rgba(0,0,0,0)"></div>
+
+<!-- ══════════════════ HERO ══════════════════ -->
+<div id="heroEl" class="relative z-10 pt-12 pb-8 px-4 text-center">
+    <h1 class="text-3xl font-extrabold text-white mb-6 flex items-center justify-center gap-3 drop-shadow-xl tracking-tight">
+        <span id="heroEmoji">🔖</span>
+        <span id="heroTitle">Bookmarks Browser</span>
+    </h1>
+
+    <!-- Search -->
+    <div class="srch max-w-xl mx-auto flex items-center gap-3 bg-white/10 border border-white/20 rounded-full px-5 py-3 backdrop-blur-xl transition-all duration-300">
+        <div class="relative flex-shrink-0">
+            <button id="engBtn" onclick="toggleEngMenu(event)" class="text-xl opacity-80 hover:opacity-100 transition focus:outline-none">🌐</button>
+            <div id="engMenu" class="hidden absolute top-10 left-0 bg-gray-900 border border-gray-700 rounded-2xl p-1.5 z-50 shadow-2xl min-w-[170px] animate-fade-in">
+                <div onclick="setEng('google','🌐','Google')"      class="eng-opt flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm text-gray-300 hover:bg-gray-800 cursor-pointer transition">🌐 Google</div>
+                <div onclick="setEng('bing','🔵','Bing')"          class="eng-opt flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm text-gray-300 hover:bg-gray-800 cursor-pointer transition">🔵 Bing</div>
+                <div onclick="setEng('duckduckgo','🦆','DDG')"     class="eng-opt flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm text-gray-300 hover:bg-gray-800 cursor-pointer transition">🦆 DuckDuckGo</div>
+                <div onclick="setEng('brave','🦁','Brave')"        class="eng-opt flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm text-gray-300 hover:bg-gray-800 cursor-pointer transition">🦁 Brave</div>
+                <div onclick="setEng('yandex','🔎','Yandex')"      class="eng-opt flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm text-gray-300 hover:bg-gray-800 cursor-pointer transition">🔎 Yandex</div>
+                <div onclick="setEng('startpage','🔏','Startpage')" class="eng-opt flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm text-gray-300 hover:bg-gray-800 cursor-pointer transition">🔏 Startpage</div>
+            </div>
+        </div>
+        <input id="srchIn" type="text" placeholder="Search the web or type a URL…" class="flex-1 bg-transparent outline-none text-white placeholder-white/40 text-sm" />
+        <button onclick="doSearch()" class="acc-bg text-white w-8 h-8 rounded-full flex items-center justify-center hover:opacity-90 transition flex-shrink-0 font-bold text-sm">→</button>
+    </div>
+    <p class="mt-2.5 text-white/35 text-xs">Press <kbd class="bg-white/10 px-1.5 py-0.5 rounded text-white/50 text-[10px]">Ctrl+K</kbd> for command palette &nbsp;·&nbsp; <kbd class="bg-white/10 px-1.5 py-0.5 rounded text-white/50 text-[10px]">Ctrl+B</kbd> add bookmark</p>
+</div>
+
+<!-- ══════════════════ NAVBAR ══════════════════ -->
+<nav id="navEl" class="navbar sticky top-0 z-30 flex items-center gap-1 px-3 noscroll overflow-x-auto">
+    <button class="nav-btn nav-act flex-shrink-0 text-xs font-semibold px-3 py-3.5 text-gray-400 border-b-2 border-transparent transition hover:text-white whitespace-nowrap" onclick="filterCat('all',this)">All</button>
+    <div class="ml-auto flex-shrink-0 flex items-center gap-0.5 py-1">
+        <button onclick="openAddModal()"    title="Add Bookmark (Ctrl+B)"  class="text-gray-400 hover:text-white hover:bg-white/5 rounded-lg px-2.5 py-2 text-sm transition">➕</button>
+        <button onclick="openCmdPalette()"  title="Command Palette (Ctrl+K)" class="text-gray-400 hover:text-white hover:bg-white/5 rounded-lg px-2.5 py-2 text-sm transition">⌨️</button>
+        <button onclick="openCatModal()"    title="Manage Categories"       class="text-gray-400 hover:text-white hover:bg-white/5 rounded-lg px-2.5 py-2 text-sm transition">📂</button>
+        <button onclick="openSettings()"    title="Settings"                class="text-gray-400 hover:text-white hover:bg-white/5 rounded-lg px-2.5 py-2 text-sm transition">⚙️</button>
+    </div>
+</nav>
+
+<!-- ══════════════════ MAIN GRID ══════════════════ -->
+<main id="gridEl" class="relative z-10 p-5 grid gap-4 max-w-screen-2xl mx-auto" style="grid-template-columns:repeat(auto-fill,minmax(270px,1fr))"></main>
+
+<!-- ══════════════════ FAB ══════════════════ -->
+<button onclick="openAddModal()" class="fixed bottom-7 right-7 z-40 acc-bg text-white px-5 py-3.5 rounded-full shadow-2xl flex items-center gap-2 text-sm font-bold hover:opacity-90 transition hover:scale-105 active:scale-95">
+    ➕ Add Bookmark
+</button>
+
+<!-- ══════════════════ COMMAND PALETTE ══════════════════ -->
+<div id="cmdPal" class="hidden fixed inset-0 z-50 flex items-start justify-center pt-[10vh] modal-bd bg-black/60">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-lg shadow-2xl animate-fade-in overflow-hidden mx-4">
+        <div class="flex items-center gap-3 px-4 py-3.5 border-b border-gray-800">
+            <span class="text-gray-400">🔍</span>
+            <input id="cmdIn" type="text" placeholder="Search bookmarks or type a command…" class="flex-1 bg-transparent outline-none text-white text-sm placeholder-gray-600" />
+            <kbd class="bg-gray-800 text-gray-600 text-[10px] px-2 py-1 rounded">ESC</kbd>
+        </div>
+        <div id="cmdRes" class="max-h-80 overflow-y-auto p-2"></div>
+        <div class="border-t border-gray-800 px-4 py-2 flex gap-4 text-[10px] text-gray-700">
+            <span>↵ open</span><span>⇥ copy url</span><span>ESC close</span>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════ ADD / EDIT BOOKMARK MODAL ══════════════════ -->
+<div id="bmModal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-bd bg-black/70">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md shadow-2xl animate-fade-in mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between px-6 py-5 border-b border-gray-800 sticky top-0 bg-gray-900 z-10">
+            <h2 id="bmTitle" class="text-base font-bold text-white">➕ Add Bookmark</h2>
+            <button onclick="closeBmModal()" class="text-gray-500 hover:text-white bg-gray-800 hover:bg-gray-700 w-8 h-8 rounded-lg flex items-center justify-center transition">✕</button>
+        </div>
+
+        <div class="p-6 space-y-4">
+            <!-- URL first (auto-fill name) -->
+            <div>
+                <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">URL *</label>
+                <div class="flex gap-2">
+                    <input id="bm-url" type="url" placeholder="https://…" oninput="autoFillName()" class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-[var(--accent)] transition placeholder-gray-600" />
+                    <button onclick="fetchMeta()" class="acc-bg text-white px-3 rounded-xl text-xs font-bold hover:opacity-90 transition whitespace-nowrap" title="Auto-fetch title & icon">✨ Fetch</button>
+                </div>
+                <p class="text-[10px] text-gray-600 mt-1">Click ✨ Fetch to auto-fill name & icon from the website</p>
+            </div>
+
+            <div>
+                <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Name *</label>
+                <input id="bm-name" type="text" placeholder="e.g. GitHub" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-[var(--accent)] transition placeholder-gray-600" />
+            </div>
+
+            <!-- Icon section -->
+            <div>
+                <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Icon</label>
+                <div class="flex gap-2 mb-2">
+                    <button onclick="setIconTab('emoji')" id="tab-emoji" class="tab-btn tab-act flex-1 bg-gray-800 border border-gray-700 rounded-xl py-2 text-xs font-bold transition text-gray-400">😀 Emoji</button>
+                    <button onclick="setIconTab('favicon')" id="tab-favicon" class="tab-btn flex-1 bg-gray-800 border border-gray-700 rounded-xl py-2 text-xs font-bold transition text-gray-400">🌐 Favicon</button>
+                    <button onclick="setIconTab('upload')" id="tab-upload" class="tab-btn flex-1 bg-gray-800 border border-gray-700 rounded-xl py-2 text-xs font-bold transition text-gray-400">📁 Upload</button>
+                </div>
+
+                <!-- Emoji tab -->
+                <div id="icon-emoji" class="icon-tab">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div id="emojiPreview" class="w-12 h-12 bg-gray-800 border border-gray-700 rounded-xl flex items-center justify-center text-2xl flex-shrink-0">🔗</div>
+                        <input id="bm-icon" type="text" placeholder="Paste emoji…" maxlength="8" oninput="updateEmojiPreview()" class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-[var(--accent)] transition placeholder-gray-600 text-center text-xl" />
+                        <input type="color" id="bm-color" value="#6366f1" class="w-12 h-12 rounded-xl border border-gray-700 p-1 bg-gray-800 flex-shrink-0" title="Icon background color" />
+                    </div>
+                    <!-- Quick emoji grid -->
+                    <div class="grid grid-cols-10 gap-1 max-h-32 overflow-y-auto p-1 bg-gray-800/50 rounded-xl">
+                        <span id="emojiGridEl"></span>
+                    </div>
+                </div>
+
+                <!-- Favicon tab -->
+                <div id="icon-favicon" class="icon-tab hidden">
+                    <div class="flex items-center gap-3 p-3 bg-gray-800 rounded-xl">
+                        <img id="faviconPrev" src="" class="w-10 h-10 rounded-lg" style="display:none" />
+                        <div id="faviconNone" class="w-10 h-10 rounded-lg bg-gray-700 flex items-center justify-center text-gray-500 text-xs">?</div>
+                        <div>
+                            <p class="text-xs text-gray-400 mb-1">Auto favicon from URL domain</p>
+                            <button onclick="previewFavicon()" class="acc-bg text-white text-xs px-3 py-1.5 rounded-lg font-bold hover:opacity-90 transition">Preview Favicon</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Upload tab -->
+                <div id="icon-upload" class="icon-tab hidden">
+                    <div class="flex items-center gap-3">
+                        <div id="uploadPrev" class="w-12 h-12 rounded-xl bg-gray-800 border border-gray-700 flex items-center justify-center text-gray-500 text-xs overflow-hidden flex-shrink-0">?</div>
+                        <button onclick="document.getElementById('iconFileIn').click()" class="flex-1 bg-gray-800 border-2 border-dashed border-gray-700 hover:border-[var(--accent)] text-gray-400 hover:text-[var(--accent)] rounded-xl py-3 text-xs font-bold transition text-center">
+                            📁 Upload icon image
+                        </button>
+                        <input type="file" id="iconFileIn" accept="image/*" class="hidden" onchange="uploadIcon(event)" />
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tags -->
+            <div>
+                <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Tags <span class="normal-case text-gray-600 font-normal">(comma separated)</span></label>
+                <input id="bm-tags" type="text" placeholder="security, tools, osint…" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-[var(--accent)] transition placeholder-gray-600" />
+            </div>
+
+            <!-- Category & type -->
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Category *</label>
+                    <select id="bm-cat" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[var(--accent)] transition"></select>
+                </div>
+                <div>
+                    <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Display</label>
+                    <select id="bm-type" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[var(--accent)] transition">
+                        <option value="list">📋 List</option>
+                        <option value="grid">⊞ Grid</option>
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Or New Category</label>
+                <input id="bm-newcat" type="text" placeholder="New category name…" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-[var(--accent)] transition placeholder-gray-600" />
+            </div>
+
+            <!-- Description -->
+            <div>
+                <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Description <span class="normal-case text-gray-600 font-normal">(optional)</span></label>
+                <input id="bm-desc" type="text" placeholder="Short note about this bookmark…" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-[var(--accent)] transition placeholder-gray-600" />
+            </div>
+        </div>
+
+        <div class="flex gap-3 px-6 pb-6">
+            <button onclick="closeBmModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white py-2.5 rounded-xl text-sm font-bold transition">Cancel</button>
+            <button onclick="saveBm()" class="flex-1 acc-bg text-white py-2.5 rounded-xl text-sm font-bold hover:opacity-90 transition">Save Bookmark</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════ CATEGORY MODAL ══════════════════ -->
+<div id="catModal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-bd bg-black/70">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-sm shadow-2xl animate-fade-in mx-4">
+        <div class="flex items-center justify-between px-6 py-5 border-b border-gray-800">
+            <h2 class="text-base font-bold text-white">📂 Manage Categories</h2>
+            <button onclick="closeCatModal()" class="text-gray-500 hover:text-white bg-gray-800 hover:bg-gray-700 w-8 h-8 rounded-lg flex items-center justify-center transition">✕</button>
+        </div>
+        <div class="p-6 space-y-4">
+            <!-- Add new -->
+            <div class="space-y-2">
+                <div class="flex gap-2">
+                    <input id="newCatName" type="text" placeholder="Category name…" class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[var(--accent)] transition placeholder-gray-600" />
+                    <div id="catIconPrev" class="w-10 h-10 bg-gray-800 border border-gray-700 rounded-xl flex items-center justify-center text-xl cursor-pointer hover:border-[var(--accent)] transition" onclick="toggleCatEmojiPicker()" title="Pick icon">📂</div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <select id="newCatType" class="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[var(--accent)] transition">
+                        <option value="list">📋 List view</option>
+                        <option value="grid">⊞ Grid view</option>
+                    </select>
+                    <button onclick="addCat()" class="acc-bg text-white rounded-xl text-sm font-bold hover:opacity-90 transition">➕ Add Category</button>
+                </div>
+                <!-- Cat emoji picker -->
+                <div id="catEmojiPicker" class="epicker grid-cols-10 gap-1 max-h-28 overflow-y-auto p-2 bg-gray-800 rounded-xl"></div>
+            </div>
+            <!-- Existing cats -->
+            <div id="catListEl" class="space-y-1.5 max-h-64 overflow-y-auto"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════ SETTINGS PANEL ══════════════════ -->
+<div class="fixed inset-0 z-40 pointer-events-none">
+    <div id="spOv" class="absolute inset-0 opacity-0 pointer-events-none transition-opacity duration-300 modal-bd bg-black/50"></div>
+    <div id="spEl" class="spanel absolute right-0 top-0 h-full w-[340px] bg-gray-950 border-l border-gray-800/60 shadow-2xl overflow-y-auto pointer-events-auto">
+
+        <!-- Header -->
+        <div class="sticky top-0 z-10 bg-gray-950/95 backdrop-blur border-b border-gray-800/60 px-5 py-4 flex items-center justify-between">
+            <span class="font-bold text-white text-sm tracking-tight">⚙️ Settings & Customization</span>
+            <button onclick="closeSettings()" class="text-gray-500 hover:text-white text-lg transition leading-none">✕</button>
+        </div>
+
+        <div class="p-5 space-y-7">
+
+            <!-- ── Theme Presets ── -->
+            <section>
+                <p class="stitle">🎨 Theme Presets</p>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="applyTheme('dark')"       class="theme-p rounded-xl py-2.5 text-[11px] font-bold border border-gray-700 hover:border-[var(--accent)] transition" style="background:linear-gradient(135deg,#1a1a2e,#16213e);color:#e0e0e0">🌙 Dark</button>
+                    <button onclick="applyTheme('light')"      class="theme-p rounded-xl py-2.5 text-[11px] font-bold border border-gray-300 hover:border-[var(--accent)] transition" style="background:linear-gradient(135deg,#f0f4f8,#dce5f0);color:#1a202c">☀️ Light</button>
+                    <button onclick="applyTheme('github')"     class="theme-p rounded-xl py-2.5 text-[11px] font-bold border border-gray-700 hover:border-[var(--accent)] transition" style="background:linear-gradient(135deg,#0d1117,#161b22);color:#c9d1d9">🐙 GitHub</button>
+                    <button onclick="applyTheme('catppuccin')" class="theme-p rounded-xl py-2.5 text-[11px] font-bold border border-gray-700 hover:border-[var(--accent)] transition" style="background:linear-gradient(135deg,#1e1e2e,#313244);color:#cdd6f4">🐱 Catppuccin</button>
+                    <button onclick="applyTheme('hacker')"     class="theme-p rounded-xl py-2.5 text-[11px] font-bold border border-gray-700 hover:border-[var(--accent)] transition" style="background:linear-gradient(135deg,#0a0a0a,#1a2a1a);color:#00ff88">💚 Hacker</button>
+                    <button onclick="applyTheme('nord')"       class="theme-p rounded-xl py-2.5 text-[11px] font-bold border border-gray-700 hover:border-[var(--accent)] transition" style="background:linear-gradient(135deg,#2e3440,#3b4252);color:#eceff4">❄️ Nord</button>
+                    <button onclick="applyTheme('dracula')"    class="theme-p rounded-xl py-2.5 text-[11px] font-bold border border-gray-700 hover:border-[var(--accent)] transition" style="background:linear-gradient(135deg,#282a36,#44475a);color:#f8f8f2">🧛 Dracula</button>
+                    <button onclick="applyTheme('solarized')"  class="theme-p rounded-xl py-2.5 text-[11px] font-bold border border-gray-700 hover:border-[var(--accent)] transition" style="background:linear-gradient(135deg,#002b36,#073642);color:#839496">🌅 Solarized</button>
+                </div>
+            </section>
+
+            <!-- ── Background ── -->
+            <section>
+                <p class="stitle">🖼️ Background</p>
+                <div class="grid grid-cols-3 gap-2 mb-3" id="bgPresets">
+                    <div class="bg-p bg-sel cursor-pointer rounded-xl h-14 relative overflow-hidden border-2 border-transparent hover:scale-105 transition" style="background:linear-gradient(135deg,#1a1a2e,#0f3460)" onclick="setBg('g1',this)"><span class="absolute bottom-1 inset-x-0 text-center text-white/80 text-[9px] font-bold">Deep Blue</span></div>
+                    <div class="bg-p cursor-pointer rounded-xl h-14 relative overflow-hidden border-2 border-transparent hover:scale-105 transition" style="background:linear-gradient(135deg,#0d0d0d,#1a1a1a)" onclick="setBg('g2',this)"><span class="absolute bottom-1 inset-x-0 text-center text-white/80 text-[9px] font-bold">Black</span></div>
+                    <div class="bg-p cursor-pointer rounded-xl h-14 relative overflow-hidden border-2 border-transparent hover:scale-105 transition" style="background:linear-gradient(135deg,#0f2027,#2c5364)" onclick="setBg('g3',this)"><span class="absolute bottom-1 inset-x-0 text-center text-white/80 text-[9px] font-bold">Ocean</span></div>
+                    <div class="bg-p cursor-pointer rounded-xl h-14 relative overflow-hidden border-2 border-transparent hover:scale-105 transition" style="background:linear-gradient(135deg,#1a0533,#2d1b69)" onclick="setBg('g4',this)"><span class="absolute bottom-1 inset-x-0 text-center text-white/80 text-[9px] font-bold">Violet</span></div>
+                    <div class="bg-p cursor-pointer rounded-xl h-14 relative overflow-hidden border-2 border-transparent hover:scale-105 transition" style="background:linear-gradient(135deg,#0a2e0a,#1a4a1a)" onclick="setBg('g5',this)"><span class="absolute bottom-1 inset-x-0 text-center text-white/80 text-[9px] font-bold">Forest</span></div>
+                    <div class="bg-p cursor-pointer rounded-xl h-14 relative overflow-hidden border-2 border-transparent hover:scale-105 transition" style="background:linear-gradient(135deg,#3d0c02,#6b1a1a)" onclick="setBg('g6',this)"><span class="absolute bottom-1 inset-x-0 text-center text-white/80 text-[9px] font-bold">Crimson</span></div>
+                </div>
+
+                <!-- Custom gradient -->
+                <div class="bg-gray-800/50 rounded-xl p-3 space-y-2 mb-2">
+                    <p class="text-[11px] text-gray-500 font-semibold">Custom Gradient</p>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[11px] text-gray-400 w-10">Start</span>
+                        <input type="color" id="bgC1" value="#1a1a2e" onchange="setCustomGrad()" class="w-8 h-8 rounded-lg border border-gray-700 p-0.5 bg-gray-800 flex-1" />
+                        <input type="color" id="bgC2" value="#0f3460" onchange="setCustomGrad()" class="w-8 h-8 rounded-lg border border-gray-700 p-0.5 bg-gray-800 flex-1" />
+                        <span class="text-[11px] text-gray-400 w-6">End</span>
+                    </div>
+                    <select id="gradDir" onchange="setCustomGrad()" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white outline-none">
+                        <option value="135deg">↘ Diagonal</option>
+                        <option value="180deg">↓ Vertical</option>
+                        <option value="90deg">→ Horizontal</option>
+                        <option value="45deg">↗ Diagonal Alt</option>
+                    </select>
+                </div>
+
+                <!-- Upload -->
+                <button onclick="document.getElementById('bgFileIn').click()" class="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 border-2 border-dashed border-gray-700 hover:border-[var(--accent)] text-gray-400 hover:text-[var(--accent)] rounded-xl py-3 text-xs font-semibold transition">
+                    📁 Upload image from your computer
+                </button>
+                <input type="file" id="bgFileIn" accept="image/*" class="hidden" onchange="uploadBg(event)" />
+
+                <!-- BG fit -->
+                <div class="mt-2 flex gap-1.5" id="bgFitBtns">
+                    <button onclick="setBgFit('cover',this)"   class="bgfit-btn flex-1 text-[10px] bg-gray-800 border border-gray-700 text-gray-400 rounded-lg py-1.5 transition opt-act">Cover</button>
+                    <button onclick="setBgFit('contain',this)" class="bgfit-btn flex-1 text-[10px] bg-gray-800 border border-gray-700 text-gray-400 rounded-lg py-1.5 transition">Contain</button>
+                    <button onclick="setBgFit('auto',this)"    class="bgfit-btn flex-1 text-[10px] bg-gray-800 border border-gray-700 text-gray-400 rounded-lg py-1.5 transition">Auto</button>
+                </div>
+                <button onclick="clearBg()" class="w-full mt-2 text-gray-600 hover:text-red-400 text-[11px] py-1.5 transition">🗑️ Remove custom background</button>
+
+                <!-- Overlay -->
+                <div class="mt-3">
+                    <div class="flex justify-between text-[11px] text-gray-400 mb-1"><span>Dark overlay</span><span id="ovVal">0%</span></div>
+                    <input type="range" id="ovSlider" min="0" max="85" value="0" step="5" oninput="setOverlay(this.value)" class="w-full" />
+                </div>
+
+                <!-- Blur overlay -->
+                <div class="mt-2">
+                    <div class="flex justify-between text-[11px] text-gray-400 mb-1"><span>Background blur</span><span id="bgBlurVal">0px</span></div>
+                    <input type="range" id="bgBlurSlider" min="0" max="20" value="0" step="1" oninput="setBgBlur(this.value)" class="w-full" />
+                </div>
+            </section>
+
+            <!-- ── Widget Style ── -->
+            <section>
+                <p class="stitle">🪟 Widget Style</p>
+                <div class="flex items-center gap-3 mb-3">
+                    <label class="text-[11px] text-gray-400 flex-1">Widget color</label>
+                    <input type="color" id="wColorPick" value="#1f2937" onchange="setWColor()" class="w-10 h-8 rounded-lg border border-gray-700 p-0.5 bg-gray-800" />
+                </div>
+                <div class="mb-3">
+                    <div class="flex justify-between text-[11px] text-gray-400 mb-1"><span>Opacity</span><span id="wOpacVal">92%</span></div>
+                    <input type="range" id="wOpac" min="10" max="100" value="92" oninput="setWColor()" class="w-full" />
+                </div>
+                <div class="mb-3">
+                    <div class="flex justify-between text-[11px] text-gray-400 mb-1"><span>Blur</span><span id="wBlurVal">12px</span></div>
+                    <input type="range" id="wBlur" min="0" max="30" value="12" oninput="setWBlur(this.value)" class="w-full" />
+                </div>
+                <div class="mb-3">
+                    <div class="flex justify-between text-[11px] text-gray-400 mb-1"><span>Border radius</span><span id="wRadVal">16px</span></div>
+                    <input type="range" id="wRad" min="0" max="32" value="16" oninput="setWRad(this.value)" class="w-full" />
+                </div>
+                <div class="mb-3">
+                    <div class="flex justify-between text-[11px] text-gray-400 mb-1"><span>Card padding</span><span id="wPadVal">16px</span></div>
+                    <input type="range" id="wPad" min="8" max="32" value="16" oninput="setWPad(this.value)" class="w-full" />
+                </div>
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-[11px] text-gray-400">Show widget border</span>
+                    <div><input type="checkbox" id="wBorderTgl" class="tgl hidden" checked onchange="setWBorder(this.checked)"><label for="wBorderTgl" class="tgl-lbl"></label></div>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] text-gray-400">Card hover lift effect</span>
+                    <div><input type="checkbox" id="wLiftTgl" class="tgl hidden" checked onchange="setWLift(this.checked)"><label for="wLiftTgl" class="tgl-lbl"></label></div>
+                </div>
+            </section>
+
+            <!-- ── Accent Color ── -->
+            <section>
+                <p class="stitle">🎯 Accent Color</p>
+                <div class="flex flex-wrap gap-2 mb-3" id="accDots">
+                    <div class="acc-dot acc-sel w-7 h-7 rounded-full cursor-pointer border-2 border-transparent hover:scale-110 transition" style="background:#6366f1" onclick="setAccent('#6366f1','#4f46e5',this)"></div>
+                    <div class="acc-dot w-7 h-7 rounded-full cursor-pointer border-2 border-transparent hover:scale-110 transition" style="background:#ec4899" onclick="setAccent('#ec4899','#db2777',this)"></div>
+                    <div class="acc-dot w-7 h-7 rounded-full cursor-pointer border-2 border-transparent hover:scale-110 transition" style="background:#22c55e" onclick="setAccent('#22c55e','#16a34a',this)"></div>
+                    <div class="acc-dot w-7 h-7 rounded-full cursor-pointer border-2 border-transparent hover:scale-110 transition" style="background:#f59e0b" onclick="setAccent('#f59e0b','#d97706',this)"></div>
+                    <div class="acc-dot w-7 h-7 rounded-full cursor-pointer border-2 border-transparent hover:scale-110 transition" style="background:#0ea5e9" onclick="setAccent('#0ea5e9','#0284c7',this)"></div>
+                    <div class="acc-dot w-7 h-7 rounded-full cursor-pointer border-2 border-transparent hover:scale-110 transition" style="background:#14b8a6" onclick="setAccent('#14b8a6','#0d9488',this)"></div>
+                    <div class="acc-dot w-7 h-7 rounded-full cursor-pointer border-2 border-transparent hover:scale-110 transition" style="background:#f97316" onclick="setAccent('#f97316','#ea580c',this)"></div>
+                    <div class="acc-dot w-7 h-7 rounded-full cursor-pointer border-2 border-transparent hover:scale-110 transition" style="background:#ef4444" onclick="setAccent('#ef4444','#dc2626',this)"></div>
+                    <div class="acc-dot w-7 h-7 rounded-full cursor-pointer border-2 border-transparent hover:scale-110 transition" style="background:#a855f7" onclick="setAccent('#a855f7','#9333ea',this)"></div>
+                    <div class="acc-dot w-7 h-7 rounded-full cursor-pointer border-2 border-transparent hover:scale-110 transition" style="background:#06b6d4" onclick="setAccent('#06b6d4','#0891b2',this)"></div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <label class="text-[11px] text-gray-400">Custom</label>
+                    <input type="color" id="accCustom" value="#6366f1" onchange="setAccentCustom()" class="w-10 h-8 rounded-lg border border-gray-700 p-0.5 bg-gray-800 flex-1" />
+                </div>
+            </section>
+
+            <!-- ── Typography ── -->
+            <section>
+                <p class="stitle">✍️ Typography</p>
+                <div class="mb-3">
+                    <label class="text-[11px] text-gray-400 block mb-1.5">Font family</label>
+                    <select id="fontFam" onchange="setFont(this.value)" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-[var(--accent)] transition">
+                        <option value="system">System Default</option>
+                        <option value="inter">Inter</option>
+                        <option value="mono">Monospace</option>
+                        <option value="serif">Serif</option>
+                    </select>
+                </div>
+                <label class="text-[11px] text-gray-400 block mb-1.5">Font size</label>
+                <div class="grid grid-cols-3 gap-1.5">
+                    <button onclick="setFontSize('13px',this)" class="fs-btn bg-gray-800 border border-gray-700 hover:border-[var(--accent)] text-gray-400 text-[11px] py-2 rounded-xl transition">Small</button>
+                    <button onclick="setFontSize('15px',this)" class="fs-btn bg-gray-800 border border-gray-700 hover:border-[var(--accent)] text-gray-400 text-[11px] py-2 rounded-xl transition opt-act">Medium</button>
+                    <button onclick="setFontSize('17px',this)" class="fs-btn bg-gray-800 border border-gray-700 hover:border-[var(--accent)] text-gray-400 text-[11px] py-2 rounded-xl transition">Large</button>
+                </div>
+            </section>
+
+            <!-- ── Layout ── -->
+            <section>
+                <p class="stitle">📐 Layout</p>
+                <label class="text-[11px] text-gray-400 block mb-1.5">Grid columns</label>
+                <div class="grid grid-cols-5 gap-1.5 mb-4">
+                    <button onclick="setCols('repeat(auto-fill,minmax(270px,1fr))',this)" class="col-btn bg-gray-800 border border-gray-700 text-gray-400 text-[11px] py-2 rounded-xl transition hover:border-[var(--accent)]">Auto</button>
+                    <button onclick="setCols('repeat(1,1fr)',this)"  class="col-btn bg-gray-800 border border-gray-700 text-gray-400 text-[11px] py-2 rounded-xl transition hover:border-[var(--accent)]">1</button>
+                    <button onclick="setCols('repeat(2,1fr)',this)"  class="col-btn bg-gray-800 border border-gray-700 text-gray-400 text-[11px] py-2 rounded-xl transition hover:border-[var(--accent)]">2</button>
+                    <button onclick="setCols('repeat(3,1fr)',this)"  class="col-btn bg-gray-800 border border-gray-700 text-gray-400 text-[11px] py-2 rounded-xl transition hover:border-[var(--accent)]">3</button>
+                    <button onclick="setCols('repeat(4,1fr)',this)"  class="col-btn bg-gray-800 border border-gray-700 text-gray-400 text-[11px] py-2 rounded-xl transition hover:border-[var(--accent)] opt-act">4</button>
+                </div>
+
+                <div class="space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[11px] text-gray-400">Show hero / search</span>
+                        <div><input type="checkbox" id="heroTgl" class="tgl hidden" checked onchange="toggleHero(this.checked)"><label for="heroTgl" class="tgl-lbl"></label></div>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-[11px] text-gray-400">Show real favicons</span>
+                        <div><input type="checkbox" id="favTgl" class="tgl hidden" checked onchange="toggleFavicons(this.checked)"><label for="favTgl" class="tgl-lbl"></label></div>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-[11px] text-gray-400">Show bookmark count badge</span>
+                        <div><input type="checkbox" id="badgeTgl" class="tgl hidden" checked onchange="toggleBadge(this.checked)"><label for="badgeTgl" class="tgl-lbl"></label></div>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-[11px] text-gray-400">Show descriptions</span>
+                        <div><input type="checkbox" id="descTgl" class="tgl hidden" checked onchange="toggleDesc(this.checked)"><label for="descTgl" class="tgl-lbl"></label></div>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-[11px] text-gray-400">Show tags</span>
+                        <div><input type="checkbox" id="tagsTgl" class="tgl hidden" checked onchange="toggleTags(this.checked)"><label for="tagsTgl" class="tgl-lbl"></label></div>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-[11px] text-gray-400">Open links in new tab</span>
+                        <div><input type="checkbox" id="newTabTgl" class="tgl hidden" checked onchange="toggleNewTab(this.checked)"><label for="newTabTgl" class="tgl-lbl"></label></div>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-[11px] text-gray-400">Compact mode</span>
+                        <div><input type="checkbox" id="compactTgl" class="tgl hidden" onchange="toggleCompact(this.checked)"><label for="compactTgl" class="tgl-lbl"></label></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ── Page Branding ── -->
+            <section>
+                <p class="stitle">🏷️ Page Branding</p>
+                <div class="space-y-2">
+                    <div class="flex gap-2">
+                        <div id="heroBrandEmoji" class="w-10 h-10 bg-gray-800 border border-gray-700 rounded-xl flex items-center justify-center text-xl cursor-pointer hover:border-[var(--accent)] transition flex-shrink-0" onclick="toggleBrandEmojiPicker()" title="Pick page emoji">🔖</div>
+                        <input id="pageTitleIn" type="text" value="Bookmarks Browser" class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-[var(--accent)] transition" placeholder="Page title…" />
+                    </div>
+                    <div id="brandEmojiPicker" class="epicker grid-cols-10 gap-1 max-h-28 overflow-y-auto p-2 bg-gray-800 rounded-xl"></div>
+                    <button onclick="saveTitle()" class="w-full acc-bg text-white text-[11px] font-bold py-2.5 rounded-xl hover:opacity-90 transition">Save Branding</button>
+                </div>
+            </section>
+
+            <!-- ── Data ── -->
+            <section>
+                <p class="stitle">💾 Data Management</p>
+                <div class="grid grid-cols-2 gap-2 mb-2">
+                    <button onclick="exportData()" class="bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-[var(--accent)] text-gray-400 hover:text-[var(--accent)] text-[11px] font-semibold py-2.5 rounded-xl transition">📤 Export JSON</button>
+                    <button onclick="document.getElementById('importIn').click()" class="bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-[var(--accent)] text-gray-400 hover:text-[var(--accent)] text-[11px] font-semibold py-2.5 rounded-xl transition">📥 Import JSON</button>
+                </div>
+                <button onclick="exportHTML()" class="w-full bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-[var(--accent)] text-gray-400 hover:text-[var(--accent)] text-[11px] font-semibold py-2.5 rounded-xl transition mb-2">🌐 Export as HTML page</button>
+                <input type="file" id="importIn" accept=".json" class="hidden" onchange="importData(event)" />
+                <input type="file" id="importIn" accept=".json" class="hidden" onchange="importData(event)" />
+                <button onclick="document.getElementById('importHtmlIn').click()" 
+    class="w-full bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-[var(--accent)] text-gray-400 hover:text-[var(--accent)] text-[11px] font-semibold py-2.5 rounded-xl transition mb-2">
+    📑 Import Browser Bookmarks HTML
+</button>
+
+<input 
+    type="file" 
+    id="importHtmlIn" 
+    accept=".html,.htm,text/html" 
+    class="hidden" 
+    onchange="importHtmlBookmarks(event)" 
+/>
+
+                <div class="flex items-center gap-2 bg-gray-800/50 rounded-xl px-3 py-2 mb-2">
+                    <span class="text-[11px] text-gray-500">Total bookmarks:</span>
+                    <span id="totalCount" class="text-[11px] font-bold acc-txt">0</span>
+                </div>
+                <button onclick="resetAll()" class="w-full bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-[11px] font-semibold py-2.5 rounded-xl transition">⚠️ Reset everything</button>
+            </section>
+
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════ CONTEXT MENU ══════════════════ -->
+<div id="ctxMenu" class="hidden fixed z-50 bg-gray-900 border border-gray-700/60 rounded-2xl shadow-2xl py-1.5 min-w-[180px] animate-fade-in">
+    <button onclick="ctxEdit()"     class="flex items-center gap-2.5 w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition rounded-lg mx-auto">✏️ Edit bookmark</button>
+    <button onclick="ctxOpen()"     class="flex items-center gap-2.5 w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition rounded-lg mx-auto">🔗 Open in new tab</button>
+    <button onclick="ctxCopy()"     class="flex items-center gap-2.5 w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition rounded-lg mx-auto">📋 Copy URL</button>
+    <button onclick="ctxCopyName()" class="flex items-center gap-2.5 w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition rounded-lg mx-auto">📝 Copy name</button>
+    <button onclick="ctxMove()"     class="flex items-center gap-2.5 w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition rounded-lg mx-auto">📂 Move to…</button>
+    <div class="border-t border-gray-800 my-1 mx-2"></div>
+    <button onclick="ctxDel()"      class="flex items-center gap-2.5 w-full px-4 py-2 text-sm text-red-400 hover:bg-red-500/10 transition rounded-lg mx-auto">🗑️ Delete</button>
+</div>
+
+<!-- Move modal -->
+<div id="moveModal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-bd bg-black/70">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-xs shadow-2xl animate-fade-in mx-4 p-6">
+        <h3 class="text-sm font-bold text-white mb-4">📂 Move to category</h3>
+        <div id="moveCatList" class="space-y-1.5 max-h-52 overflow-y-auto mb-4"></div>
+        <button onclick="document.getElementById('moveModal').classList.add('hidden')" class="w-full bg-gray-800 text-gray-400 py-2 rounded-xl text-sm font-bold transition hover:bg-gray-700">Cancel</button>
+    </div>
+</div>
+
+<!-- ══════════════════ TOAST ══════════════════ -->
+<div id="toastEl" class="fixed bottom-24 right-7 z-50 space-y-2 pointer-events-none"></div>
+
+<script>
+// ══════════════════════════════════════════════
+//  EMOJI DATA
+// ══════════════════════════════════════════════
+const EMOJIS = ['🔗','🌐','🔍','🛡️','🔐','🔒','🔓','🔑','🗝️','🔔','⭐','💡','📌','📍','🏠','🏢','🏭','🏦','🎯','🎨','🎭','🎬','🎮','🎰','🎲','🎵','🎸','🎤','🎧','🎹','📱','💻','🖥️','⌨️','🖱️','📷','📸','📹','📺','📻','📡','🔭','🔬','🧪','🧬','🧫','⚗️','🔧','🔨','⚙️','🔩','🛠️','⚡','🔋','💾','💿','📀','📁','📂','📃','📄','📋','📊','📈','📉','🗂️','🗃️','📝','✏️','🖊️','🖋️','📖','📚','📰','🗞️','📜','📑','🔖','🏷️','💰','💵','💸','💳','🏧','💹','📦','🛒','🚀','🛸','🛰️','✈️','🚂','🚗','🚀','🌍','🌎','🌏','🌐','🗺️','🧭','⛺','🏖️','🏔️','🌋','🌊','🌈','☀️','🌙','⭐','🌟','💫','⚡','❄️','🔥','💧','🌪️','🌿','🍀','🌱','🌲','🌳','🍁','🌸','🌺','🌻','🐉','🦁','🐯','🦊','🐺','🦅','🦆','🦁','🐙','🦑','🦋','🐝','🐛','🦗','🦕','🦖','🤖','👾','👻','💀','☠️','🎃','🎄','🎆','🎇','🧨','✨','🎉','🎊','🎋','🎍','🎎','🎏','🎐','🎑','🎀','🎁','🎗️','🎟️','🎫','🏆','🥇','🥈','🥉','🏅','🎖️','🏵️','🎪','🤹','🎭','🎨','🖼️','🎰','🎯','🎱','🎳','⛳','🏹','🎣','🥊','🏋️','🤸','🏊','🚴','🧘','🏄','⛷️'];
+
+// ══════════════════════════════════════════════
+//  DEFAULT DATA
+// ══════════════════════════════════════════════
+const DEF = {
+    "Reading Blogs": { type:"list", icon:"📖", items:[
+        {name:"Krebs on Security",    url:"https://krebsonsecurity.com",  icon:"🔒", color:"#ef4444", tags:["security","blog"], desc:"Security journalism by Brian Krebs"},
+        {name:"Hexacorn Blog",        url:"https://hexacorn.com/blog",    icon:"📝", color:"#6366f1", tags:["malware","research"], desc:""},
+        {name:"IBM Research Blog",    url:"https://research.ibm.com/blog",icon:"💡", color:"#0ea5e9", tags:["research","ai"], desc:""},
+        {name:"GitHub Blog",          url:"https://github.blog",          icon:"🐙", color:"#374151", tags:["dev"], desc:""},
+        {name:"CrowdStrike Blog",     url:"https://crowdstrike.com/blog", icon:"🦅", color:"#f97316", tags:["security","threat"], desc:""},
+    ]},
+    "Search Engines": { type:"list", icon:"🔍", items:[
+        {name:"Google",        url:"https://google.com",          icon:"🔍", color:"#4285f4", tags:["search"], desc:""},
+        {name:"DuckDuckGo",    url:"https://duckduckgo.com",      icon:"🦆", color:"#de5833", tags:["search","privacy"], desc:"Private search engine"},
+        {name:"Brave Search",  url:"https://search.brave.com",    icon:"🦁", color:"#f97316", tags:["search","privacy"], desc:""},
+        {name:"Shodan",        url:"https://shodan.io",           icon:"🔭", color:"#ef4444", tags:["osint","search"], desc:"Search engine for internet-connected devices"},
+        {name:"Censys",        url:"https://censys.io",           icon:"🌐", color:"#6366f1", tags:["osint"], desc:""},
+    ]},
+    "AI Tools": { type:"grid", icon:"🤖", items:[
+        {name:"ChatGPT",     url:"https://chat.openai.com",        icon:"🤖", color:"#10a37f", tags:["ai"], desc:""},
+        {name:"Gemini",      url:"https://gemini.google.com",      icon:"✨", color:"#4285f4", tags:["ai"], desc:""},
+        {name:"Claude",      url:"https://claude.ai",              icon:"🧠", color:"#f97316", tags:["ai"], desc:""},
+        {name:"Perplexity",  url:"https://perplexity.ai",          icon:"🔮", color:"#ec4899", tags:["ai","search"], desc:""},
+        {name:"Deepseek",    url:"https://chat.deepseek.com",           icon:"🌊", color:"#0ea5e9", tags:["ai"], desc:""},
+        {name:"Copilot",     url:"https://copilot.microsoft.com",  icon:"💠", color:"#0078d4", tags:["ai"], desc:""},
+        {name:"Mistral",     url:"https://mistral.ai",             icon:"🌪️",color:"#8b5cf6", tags:["ai"], desc:""},
+        {name:"Grok",        url:"https://grok.x.ai",              icon:"⚡", color:"#f59e0b", tags:["ai"], desc:""},
+        {name:"HuggingFace", url:"https://huggingface.co",         icon:"🤗", color:"#f97316", tags:["ai","ml"], desc:""},
+        {name:"Liner",       url:"https://getliner.com",           icon:"📌", color:"#14b8a6", tags:["ai","research"], desc:""},
+    ]},
+    "SOC & DFIR": { type:"list", icon:"🛡️", items:[
+        {name:"CyberDefenders",  url:"https://cyberdefenders.org", icon:"🛡️", color:"#0ea5e9", tags:["soc","training"], desc:"SOC training platform"},
+        {name:"MITRE ATT&CK",   url:"https://attack.mitre.org",   icon:"🎯", color:"#ef4444", tags:["threat","framework"], desc:""},
+        {name:"VirusTotal",      url:"https://virustotal.com",     icon:"🔬", color:"#22c55e", tags:["malware","analysis"], desc:""},
+        {name:"ANY.RUN",         url:"https://app.any.run",        icon:"🧪", color:"#f59e0b", tags:["sandbox","malware"], desc:"Interactive malware sandbox"},
+        {name:"Splunk",          url:"https://splunk.com",         icon:"📊", color:"#22c55e", tags:["siem","log"], desc:""},
+    ]},
+    "Privacy Tools": { type:"list", icon:"🕵️", items:[
+        {name:"BrowserLeaks",      url:"https://browserleaks.com",      icon:"🔍", color:"#6366f1", tags:["privacy","osint"], desc:"Test your browser fingerprint"},
+        {name:"Have I Been Pwned", url:"https://haveibeenpwned.com",    icon:"🔑", color:"#ef4444", tags:["breach","privacy"], desc:"Check if your email was leaked"},
+        {name:"Tor Project",       url:"https://torproject.org",        icon:"🧅", color:"#7c3aed", tags:["privacy","anonymity"], desc:""},
+        {name:"ProtonMail",        url:"https://proton.me",             icon:"📧", color:"#6366f1", tags:["privacy","email"], desc:""},
+    ]},
+};
+
+// ══════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════
+let D = {}, S = {}, bgImg = null;
+let activeCat = 'all', ctxTgt = null, editBm = null;
+let showFav = true, showBadge = true, showDesc = true, showTags = true, newTab = true, compact = false;
+let catIcon = '📂';
+let iconTab = 'emoji';
+let uploadedIcon = null;
+let eng = {key:'google', icon:'🌐'};
+
+const ENGINES = {
+    google:    'https://www.google.com/search?q=',
+    bing:      'https://www.bing.com/search?q=',
+    duckduckgo:'https://duckduckgo.com/?q=',
+    brave:     'https://search.brave.com/search?q=',
+    yandex:    'https://yandex.com/search/?text=',
+    startpage: 'https://www.startpage.com/search?q=',
+};
+
+const BG = {
+    g1:'linear-gradient(135deg,#1a1a2e,#0f3460)',
+    g2:'linear-gradient(135deg,#0d0d0d,#1a1a1a)',
+    g3:'linear-gradient(135deg,#0f2027,#2c5364)',
+    g4:'linear-gradient(135deg,#1a0533,#2d1b69)',
+    g5:'linear-gradient(135deg,#0a2e0a,#1a4a1a)',
+    g6:'linear-gradient(135deg,#3d0c02,#6b1a1a)',
+};
+
+// ══════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════
+function init() {
+    try {
+        D = JSON.parse(localStorage.getItem('bm3_data')) || JSON.parse(JSON.stringify(DEF));
+        S = JSON.parse(localStorage.getItem('bm3_set'))  || {};
+        bgImg = localStorage.getItem('bm3_bg') || null;
+        if (S.eng)      eng      = S.eng;
+        if (S.showFav   !== undefined) showFav   = S.showFav;
+        if (S.showBadge !== undefined) showBadge = S.showBadge;
+        if (S.showDesc  !== undefined) showDesc  = S.showDesc;
+        if (S.showTags  !== undefined) showTags  = S.showTags;
+        if (S.newTab    !== undefined) newTab    = S.newTab;
+        if (S.compact   !== undefined) compact   = S.compact;
+    } catch(e) { D = JSON.parse(JSON.stringify(DEF)); S = {}; }
+
+    buildEmojiGrids();
+    applyAll();
+    render();
+}
+
+function save() {
+    // Snapshot current live CSS variable values INTO S before saving
+    // This ensures what you SEE is what gets saved
+    S._cssVars = {
+        accent:     getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),
+        accentH:    getComputedStyle(document.documentElement).getPropertyValue('--accent-h').trim(),
+        widgetBg:   getComputedStyle(document.documentElement).getPropertyValue('--widget-bg').trim(),
+        widgetBlur: getComputedStyle(document.documentElement).getPropertyValue('--widget-blur').trim(),
+        widgetBorder: getComputedStyle(document.documentElement).getPropertyValue('--widget-border').trim(),
+        widgetRadius: getComputedStyle(document.documentElement).getPropertyValue('--widget-radius').trim(),
+    };
+
+    localStorage.setItem('bm3_data', JSON.stringify(D));
+    localStorage.setItem('bm3_set',  JSON.stringify(S));
+
+    if (bgImg) {
+        try {
+            localStorage.setItem('bm3_bg', bgImg);
+        } catch(e) {
+            toast('Image too large to store locally', 'error');
+        }
+    } else {
+        localStorage.removeItem('bm3_bg');
+    }
+
+    updateCount();
+}
+
+function updateCount() {
+    let n = 0; Object.values(D).forEach(c => n += c.items.length);
+    const el = document.getElementById('totalCount');
+    if (el) el.textContent = n;
+}
+
+// ══════════════════════════════════════════════
+//  EMOJI GRIDS
+// ══════════════════════════════════════════════
+function buildEmojiGrids() {
+    const html = EMOJIS.map(e => `<span class="cursor-pointer text-xl hover:scale-125 transition inline-block text-center p-0.5 rounded hover:bg-white/10" onclick="pickEmoji('${e}')">${e}</span>`).join('');
+    document.getElementById('emojiGridEl').outerHTML = html;
+
+    const catHtml = EMOJIS.map(e => `<span class="cursor-pointer text-xl hover:scale-125 transition inline-block text-center p-0.5 rounded hover:bg-white/10" onclick="pickCatEmoji('${e}')">${e}</span>`).join('');
+    document.getElementById('catEmojiPicker').innerHTML = catHtml;
+
+    const brandHtml = EMOJIS.map(e => `<span class="cursor-pointer text-xl hover:scale-125 transition inline-block text-center p-0.5 rounded hover:bg-white/10" onclick="pickBrandEmoji('${e}')">${e}</span>`).join('');
+    document.getElementById('brandEmojiPicker').innerHTML = brandHtml;
+}
+
+function pickEmoji(e) {
+    document.getElementById('bm-icon').value = e;
+    document.getElementById('emojiPreview').textContent = e;
+}
+function pickCatEmoji(e) {
+    catIcon = e;
+    document.getElementById('catIconPrev').textContent = e;
+    document.getElementById('catEmojiPicker').classList.remove('open');
+}
+function pickBrandEmoji(e) {
+    document.getElementById('heroEmoji').textContent = e;
+    document.getElementById('heroBrandEmoji').textContent = e;
+    S.heroEmoji = e; save();
+    document.getElementById('brandEmojiPicker').classList.remove('open');
+}
+function toggleCatEmojiPicker()   { document.getElementById('catEmojiPicker').classList.toggle('open'); }
+function toggleBrandEmojiPicker() { document.getElementById('brandEmojiPicker').classList.toggle('open'); }
+function updateEmojiPreview() { document.getElementById('emojiPreview').textContent = document.getElementById('bm-icon').value || '🔗'; }
+
+// Icon tabs
+function setIconTab(tab) {
+    iconTab = tab;
+    ['emoji','favicon','upload'].forEach(t => {
+        document.getElementById('icon-'+t).classList.toggle('hidden', t !== tab);
+        const btn = document.getElementById('tab-'+t);
+        btn.classList.toggle('tab-act', t === tab);
+    });
+}
+
+function previewFavicon() {
+    const url = document.getElementById('bm-url').value.trim();
+    const domain = getDomain(url);
+    const img = document.getElementById('faviconPrev');
+    const none = document.getElementById('faviconNone');
+    img.src = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+    img.style.display = 'block';
+    none.style.display = 'none';
+}
+
+function uploadIcon(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        uploadedIcon = e.target.result;
+        const prev = document.getElementById('uploadPrev');
+        prev.innerHTML = `<img src="${uploadedIcon}" class="w-full h-full object-cover rounded-xl" />`;
+    };
+    reader.readAsDataURL(file);
+}
+
+// Auto fill name from URL
+function autoFillName() {
+    const url = document.getElementById('bm-url').value.trim();
+    const name = document.getElementById('bm-name');
+    if (!name.value && url) {
+        try {
+            const h = new URL(url).hostname.replace('www.','');
+            name.value = h.charAt(0).toUpperCase() + h.slice(1);
+        } catch(e) {}
+    }
+}
+
+// Fetch meta (simulated)
+function fetchMeta() {
+    const url = document.getElementById('bm-url').value.trim();
+    if (!url.startsWith('http')) return toast('Enter a valid URL first','error');
+    toast('Fetching… (using domain info)','info');
+    try {
+        const domain = getDomain(url);
+        const parts = domain.replace('www.','').split('.');
+        const name = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+        if (!document.getElementById('bm-name').value) document.getElementById('bm-name').value = name;
+        // Set favicon tab
+        setIconTab('favicon');
+        previewFavicon();
+        toast(`Fetched info for ${domain} ✓`,'success');
+    } catch(e) { toast('Could not fetch metadata','error'); }
+}
+
+// ══════════════════════════════════════════════
+//  RENDER
+// ══════════════════════════════════════════════
+function render() { renderNav(); renderGrid(); renderCatList(); updateCount(); }
+
+function renderNav() {
+    const nav = document.getElementById('navEl');
+    const right = nav.querySelector('.ml-auto');
+    [...nav.children].forEach(c => { if (!c.classList.contains('ml-auto')) c.remove(); });
+
+    const mkBtn = (label, active) => {
+        const b = document.createElement('button');
+        b.className = `nav-btn flex-shrink-0 text-xs font-semibold px-3 py-3.5 border-b-2 border-transparent transition hover:text-white whitespace-nowrap ${active ? 'nav-act text-white' : 'text-gray-400'}`;
+        b.innerHTML = label;
+        return b;
+    };
+    const allBtn = mkBtn('🏠 All', activeCat === 'all');
+    allBtn.onclick = () => filterCat('all', allBtn);
+    nav.insertBefore(allBtn, right);
+
+    Object.keys(D).forEach(cat => {
+        const b = mkBtn(`${D[cat].icon || '📂'} ${cat}`, activeCat === cat);
+        b.onclick = () => filterCat(cat, b);
+        nav.insertBefore(b, right);
+    });
+}
+
+function renderGrid() {
+    const g = document.getElementById('gridEl');
+    g.innerHTML = '';
+    const cats = activeCat === 'all' ? Object.keys(D) : [activeCat];
+    cats.forEach(cat => { if (D[cat]) { const c = buildCard(cat, D[cat]); c.classList.add('animate-slide-in-up'); g.appendChild(c); } });
+}
+
+function buildCard(cat, cd) {
+    const limit = compact ? 5 : 8;
+    const visible = cd._expanded ? cd.items : cd.items.slice(0, limit);
+    const hasMore = cd.items.length > limit;
+    const pad = parseInt(S.wPad || 16);
+
+    const card = document.createElement('div');
+    card.className = 'wcard';
+    card.style.padding = pad + 'px';
+
+    // ── Header ──
+    const hdr = document.createElement('div');
+    hdr.className = 'flex items-center justify-between mb-3';
+    hdr.innerHTML = `
+        <div class="flex items-center gap-2 min-w-0">
+            <span class="text-base flex-shrink-0">${cd.icon || '📂'}</span>
+            <span class="card-ttl text-sm font-bold text-gray-100 truncate">${cat}</span>
+            ${showBadge ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0" style="background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)">${cd.items.length}</span>` : ''}
+        </div>
+        <div class="cactions flex items-center gap-0.5 flex-shrink-0">
+            <button onclick="openAddModalWith('${escJ(cat)}')" class="text-gray-500 hover:text-white hover:bg-white/5 w-6 h-6 rounded-lg text-xs flex items-center justify-center transition" title="Add bookmark">➕</button>
+            <button onclick="editCat('${escJ(cat)}')"          class="text-gray-500 hover:text-white hover:bg-white/5 w-6 h-6 rounded-lg text-xs flex items-center justify-center transition" title="Edit category">✏️</button>
+            <button onclick="switchType('${escJ(cat)}')"       class="text-gray-500 hover:text-white hover:bg-white/5 w-6 h-6 rounded-lg text-xs flex items-center justify-center transition" title="Switch list/grid">${cd.type==='grid'?'📋':'⊞'}</button>
+            <button onclick="delCat('${escJ(cat)}')"           class="text-gray-500 hover:text-red-400 hover:bg-red-500/10 w-6 h-6 rounded-lg text-xs flex items-center justify-center transition" title="Delete">🗑️</button>
+        </div>`;
+    card.appendChild(hdr);
+
+    // ── Items ──
+    if (cd.type === 'grid') {
+        const g = document.createElement('div');
+        g.className = 'grid grid-cols-5 gap-1.5';
+        visible.forEach(item => {
+            const idx = cd.items.indexOf(item);
+            const a = document.createElement('a');
+            a.href = item.url;
+            a.target = newTab ? '_blank' : '_self';
+            a.className = 'gi flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-white/5 transition no-underline';
+            a.oncontextmenu = e => { e.preventDefault(); showCtx(e, cat, idx); };
+            a.innerHTML = `
+                <div class="gi-icon w-10 h-10 rounded-xl flex items-center justify-center text-xl overflow-hidden flex-shrink-0" style="background:${item.color||'#374151'}22">
+                    ${getIconHtml(item, true)}
+                </div>
+                <span class="gi-lbl text-gray-400 text-[10px] text-center max-w-[54px] truncate leading-tight">${item.name}</span>`;
+            g.appendChild(a);
+        });
+        card.appendChild(g);
+    } else {
+        const ul = document.createElement('ul');
+        ul.className = compact ? 'space-y-0' : 'space-y-0.5';
+        visible.forEach(item => {
+            const idx = cd.items.indexOf(item);
+            const li  = document.createElement('li');
+            li.className = 'bm-row flex items-center';
+            const clr = item.color || rColor(item.name);
+            li.innerHTML = `
+                <a href="${item.url}" target="${newTab?'_blank':'_self'}"
+                   oncontextmenu="showCtx(event,'${escJ(cat)}',${idx});return false;"
+                   class="bm-link flex items-start gap-2 flex-1 px-2 py-1.5 rounded-xl hover:bg-white/5 hover:text-white transition text-xs no-underline min-w-0 text-gray-300">
+                    <div class="w-4 h-4 rounded flex-shrink-0 mt-0.5 overflow-hidden flex items-center justify-center" style="background:${clr}22;color:${clr}">
+                        ${getIconHtml(item, false)}
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <div class="truncate font-medium">${item.name}</div>
+                        ${showDesc && item.desc ? `<div class="text-gray-600 text-[10px] truncate">${item.desc}</div>` : ''}
+                        ${showTags && item.tags && item.tags.length ? `<div class="flex gap-1 flex-wrap mt-0.5">${item.tags.map(t=>`<span class="text-[9px] px-1.5 py-0.5 rounded-full" style="background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)">${t}</span>`).join('')}</div>` : ''}
+                    </div>
+                </a>
+                <button onclick="openEditBm('${escJ(cat)}',${idx})" class="bm-del text-gray-600 hover:text-white hover:bg-white/5 w-6 h-6 rounded-lg text-xs flex items-center justify-center transition flex-shrink-0" title="Edit">✏️</button>
+                <button onclick="delBm('${escJ(cat)}',${idx})"      class="bm-del text-red-400 hover:bg-red-500/10 w-6 h-6 rounded-lg text-xs flex items-center justify-center transition flex-shrink-0" title="Delete">✕</button>`;
+            ul.appendChild(li);
+        });
+        card.appendChild(ul);
+    }
+
+    // Show all
+    if (hasMore) {
+        const sa = document.createElement('button');
+        sa.className = 'w-full text-center mt-2 text-[11px] font-semibold py-1.5 rounded-lg transition hover:bg-white/5';
+        sa.style.color = 'var(--accent)';
+        sa.textContent = cd._expanded ? '▲ Show less' : `▼ Show all (${cd.items.length})`;
+        sa.onclick = () => { cd._expanded = !cd._expanded; save(); renderGrid(); };
+        card.appendChild(sa);
+    }
+    return card;
+}
+
+function getIconHtml(item, large) {
+    const sz = large ? 'w-6 h-6' : 'w-4 h-4';
+    if (item.uploadedIcon) return `<img src="${item.uploadedIcon}" class="${sz} object-cover rounded" />`;
+    if (item.useFavicon || (!item.icon && showFav)) {
+        return `<img src="https://www.google.com/s2/favicons?domain=${getDomain(item.url)}&sz=${large?32:16}" class="${sz} rounded" onerror="this.style.display='none';this.nextSibling.style.display='flex'" /><span style="display:none;font-size:${large?'1.1rem':'10px'}">${item.icon||'🔗'}</span>`;
+    }
+    if (showFav) {
+        return `<img src="https://www.google.com/s2/favicons?domain=${getDomain(item.url)}&sz=${large?32:16}" class="${sz} rounded" onerror="this.style.display='none';this.nextSibling.style.display='flex'" /><span style="display:none;font-size:${large?'1.1rem':'10px'}">${item.icon||'🔗'}</span>`;
+    }
+    return `<span style="font-size:${large?'1.1rem':'10px'}">${item.icon||'🔗'}</span>`;
+}
+
+// ══════════════════════════════════════════════
+//  CATEGORY MODAL
+// ══════════════════════════════════════════════
+function openCatModal()  { renderCatList(); document.getElementById('catModal').classList.remove('hidden'); }
+function closeCatModal() { document.getElementById('catModal').classList.add('hidden'); }
+
+function renderCatList() {
+    const el = document.getElementById('catListEl');
+    if (!el) return;
+    el.innerHTML = '';
+    Object.keys(D).forEach(cat => {
+        el.innerHTML += `
+            <div class="flex items-center gap-2 bg-gray-800/60 rounded-xl px-3 py-2">
+                <span class="text-lg flex-shrink-0">${D[cat].icon||'📂'}</span>
+                <div class="flex-1 min-w-0">
+                    <div class="text-xs font-semibold text-gray-200 truncate">${cat}</div>
+                    <div class="text-[10px] text-gray-600">${D[cat].items.length} items · ${D[cat].type}</div>
+                </div>
+                <button onclick="editCat('${escJ(cat)}')" class="text-gray-500 hover:text-white w-6 h-6 rounded-lg text-xs flex items-center justify-center hover:bg-white/5 transition">✏️</button>
+                <button onclick="delCat('${escJ(cat)}')"  class="text-red-400 w-6 h-6 rounded-lg text-xs flex items-center justify-center hover:bg-red-500/10 transition">🗑️</button>
+            </div>`;
+    });
+}
+
+function addCat() {
+    const name = document.getElementById('newCatName').value.trim();
+    const type = document.getElementById('newCatType').value;
+    if (!name) return toast('Enter a category name','error');
+    if (D[name]) return toast('Category already exists','error');
+    D[name] = { type, icon: catIcon, items: [] };
+    document.getElementById('newCatName').value = '';
+    catIcon = '📂';
+    document.getElementById('catIconPrev').textContent = '📂';
+    save(); render();
+    toast(`"${name}" created ✓`,'success');
+}
+
+function editCat(cat) {
+    const newName = prompt(`Rename "${cat}":`, cat);
+    if (!newName || newName.trim() === cat) return;
+    const n = newName.trim();
+    if (D[n]) return toast('Already exists','error');
+    D[n] = D[cat]; delete D[cat];
+    if (activeCat === cat) activeCat = n;
+    save(); render();
+    toast('Renamed ✓','success');
+}
+
+function delCat(cat) {
+    if (!confirm(`Delete "${cat}" and all its bookmarks?`)) return;
+    delete D[cat];
+    if (activeCat === cat) activeCat = 'all';
+    save(); render();
+    toast('Deleted','success');
+}
+
+function switchType(cat) {
+    D[cat].type = D[cat].type === 'grid' ? 'list' : 'grid';
+    save(); renderGrid();
+    toast(`Switched to ${D[cat].type} view`,'info');
+}
+
+// ══════════════════════════════════════════════
+//  BOOKMARK MODAL
+// ══════════════════════════════════════════════
+function openAddModal() {
+    editBm = null; uploadedIcon = null;
+    document.getElementById('bmTitle').textContent = '➕ Add Bookmark';
+    ['bm-name','bm-url','bm-tags','bm-newcat','bm-desc'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('bm-icon').value = '🔗';
+    document.getElementById('bm-color').value = '#6366f1';
+    document.getElementById('emojiPreview').textContent = '🔗';
+    document.getElementById('uploadPrev').innerHTML = '?';
+    document.getElementById('faviconPrev').style.display = 'none';
+    document.getElementById('faviconNone').style.display = 'flex';
+    setIconTab('emoji');
+    populateCatSel('');
+    document.getElementById('bmModal').classList.remove('hidden');
+    setTimeout(() => document.getElementById('bm-url').focus(), 50);
+}
+
+function openAddModalWith(cat) { openAddModal(); populateCatSel(cat); }
+
+function openEditBm(cat, idx) {
+    const item = D[cat].items[idx];
+    editBm = {cat, idx};
+    document.getElementById('bmTitle').textContent = '✏️ Edit Bookmark';
+    document.getElementById('bm-name').value  = item.name;
+    document.getElementById('bm-url').value   = item.url;
+    document.getElementById('bm-icon').value  = item.icon || '🔗';
+    document.getElementById('bm-color').value = item.color || '#6366f1';
+    document.getElementById('bm-tags').value  = (item.tags||[]).join(', ');
+    document.getElementById('bm-desc').value  = item.desc || '';
+    document.getElementById('emojiPreview').textContent = item.icon || '🔗';
+    if (item.uploadedIcon) {
+        uploadedIcon = item.uploadedIcon;
+        document.getElementById('uploadPrev').innerHTML = `<img src="${uploadedIcon}" class="w-full h-full object-cover rounded-xl" />`;
+        setIconTab('upload');
+    } else if (item.useFavicon) {
+        setIconTab('favicon'); previewFavicon();
+    } else {
+        setIconTab('emoji');
+    }
+    populateCatSel(cat);
+    document.getElementById('bmModal').classList.remove('hidden');
+}
+
+function closeBmModal() { document.getElementById('bmModal').classList.add('hidden'); editBm = null; }
+
+function populateCatSel(sel) {
+    const s = document.getElementById('bm-cat');
+    s.innerHTML = '<option value="">-- Select --</option>';
+    Object.keys(D).forEach(c => s.innerHTML += `<option value="${c}" ${c===sel?'selected':''}>${c}</option>`);
+}
+
+function saveBm() {
+    const name    = document.getElementById('bm-name').value.trim();
+    const url     = document.getElementById('bm-url').value.trim();
+    const icon    = document.getElementById('bm-icon').value.trim() || '🔗';
+    const color   = document.getElementById('bm-color').value;
+    const tagsRaw = document.getElementById('bm-tags').value;
+    const desc    = document.getElementById('bm-desc').value.trim();
+    let   cat     = document.getElementById('bm-cat').value;
+    const newCat  = document.getElementById('bm-newcat').value.trim();
+    const type    = document.getElementById('bm-type').value;
+    const tags    = tagsRaw.split(',').map(t=>t.trim()).filter(Boolean);
+
+    if (!name) return toast('Name required','error');
+    if (!url || !url.startsWith('http')) return toast('Valid URL required (http…)','error');
+
+    if (newCat) cat = newCat;
+    if (!cat)   return toast('Select or create a category','error');
+    if (!D[cat]) D[cat] = { type, icon: getCatIcon(cat), items: [] };
+
+    const useFavicon = iconTab === 'favicon';
+    const uIcon = iconTab === 'upload' ? uploadedIcon : null;
+
+    const bmObj = { name, url, icon, color, tags, desc, useFavicon };
+    if (uIcon) bmObj.uploadedIcon = uIcon;
+
+    if (editBm) {
+        const {cat:oc, idx} = editBm;
+        Object.assign(D[oc].items[idx], bmObj);
+        if (oc !== cat) {
+            const moved = D[oc].items.splice(idx, 1)[0];
+            if (!D[cat]) D[cat] = {type, icon:getCatIcon(cat), items:[]};
+            D[cat].items.push(moved);
+            if (D[oc].items.length === 0) delete D[oc];
+        }
+        toast('Updated ✓','success');
+    } else {
+        D[cat].items.push(bmObj);
+        toast('Bookmark added ✓','success');
+    }
+
+    save(); render(); closeBmModal();
+}
+
+// ══════════════════════════════════════════════
+//  FILTER
+// ══════════════════════════════════════════════
+function filterCat(cat, btn) {
+    activeCat = cat;
+    document.querySelectorAll('.nav-btn').forEach(b => { b.classList.remove('nav-act','text-white'); b.classList.add('text-gray-400'); });
+    btn.classList.add('nav-act','text-white'); btn.classList.remove('text-gray-400');
+    renderGrid();
+}
+
+// ══════════════════════════════════════════════
+//  SEARCH
+// ══════════════════════════════════════════════
+document.getElementById('srchIn').addEventListener('keydown', e => { if (e.key==='Enter') doSearch(); });
+function doSearch() {
+    const q = document.getElementById('srchIn').value.trim();
+    if (!q) return;
+    if (/^https?:\/\//.test(q)) { window.open(q,'_blank'); return; }
+    window.open((ENGINES[eng.key]||ENGINES.google)+encodeURIComponent(q),'_blank');
+}
+function toggleEngMenu(e) { e.stopPropagation(); document.getElementById('engMenu').classList.toggle('hidden'); }
+function setEng(key, icon, name) {
+    eng = {key, icon, name};
+    document.getElementById('engBtn').textContent = icon;
+    S.eng = eng; save();
+    document.getElementById('engMenu').classList.add('hidden');
+}
+
+// ══════════════════════════════════════════════
+//  COMMAND PALETTE
+// ══════════════════════════════════════════════
+function openCmdPalette() {
+    document.getElementById('cmdPal').classList.remove('hidden');
+    document.getElementById('cmdIn').value = '';
+    renderCmd('');
+    setTimeout(() => document.getElementById('cmdIn').focus(), 40);
+}
+function closeCmdPalette() { document.getElementById('cmdPal').classList.add('hidden'); }
+
+document.getElementById('cmdIn').addEventListener('input', e => renderCmd(e.target.value));
+document.getElementById('cmdIn').addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeCmdPalette();
+    if (e.key === 'Tab') { e.preventDefault(); const a = document.querySelector('#cmdRes a'); if (a) navigator.clipboard.writeText(a.dataset.url||''); }
+    if (e.key === 'Enter') { const a = document.querySelector('#cmdRes a'); if (a) { window.open(a.href,'_blank'); closeCmdPalette(); } else doSearch(); }
+});
+document.getElementById('cmdPal').addEventListener('click', e => { if (e.target===document.getElementById('cmdPal')) closeCmdPalette(); });
+
+function renderCmd(q) {
+    const res = document.getElementById('cmdRes');
+    const ql  = q.toLowerCase().trim();
+    if (!ql) { res.innerHTML = '<p class="text-gray-600 text-xs text-center py-8">Start typing to search bookmarks…</p>'; return; }
+
+    let html = '', cnt = 0;
+    Object.entries(D).forEach(([cat, cd]) => {
+        cd.items.forEach((item, idx) => {
+            if (cnt >= 10) return;
+            if (item.name.toLowerCase().includes(ql) || item.url.toLowerCase().includes(ql) || cat.toLowerCase().includes(ql) || (item.tags||[]).some(t=>t.includes(ql))) {
+                html += `<a href="${item.url}" target="_blank" data-url="${item.url}" onclick="closeCmdPalette()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-800 transition group no-underline">
+                    <img src="https://www.google.com/s2/favicons?domain=${getDomain(item.url)}&sz=32" class="w-5 h-5 rounded flex-shrink-0" onerror="this.style.display='none'" />
+                    <div class="flex-1 min-w-0">
+                        <div class="text-sm text-gray-200 group-hover:text-white font-medium truncate">${item.name}</div>
+                        <div class="text-[10px] text-gray-600 truncate">${item.url}</div>
+                    </div>
+                    <span class="text-[10px] text-gray-700 flex-shrink-0">${cat}</span>
+                </a>`;
+                cnt++;
+            }
+        });
+    });
+
+    if (!cnt) html = `<div class="text-center py-8"><p class="text-gray-500 text-sm mb-1">No results</p><p class="text-gray-700 text-xs">Enter to search "<span class="text-gray-400">${q}</span>" on the web</p></div>`;
+    res.innerHTML = html;
+}
+
+// ══════════════════════════════════════════════
+//  CONTEXT MENU
+// ══════════════════════════════════════════════
+function showCtx(e, cat, idx) {
+    e.preventDefault(); ctxTgt = {cat, idx};
+    const m = document.getElementById('ctxMenu');
+    m.classList.remove('hidden');
+    let x = e.clientX, y = e.clientY;
+    if (x+190>window.innerWidth)  x = window.innerWidth-195;
+    if (y+220>window.innerHeight) y = window.innerHeight-225;
+    m.style.left = x+'px'; m.style.top = y+'px';
+}
+function ctxEdit()     { if (!ctxTgt) return; openEditBm(ctxTgt.cat, ctxTgt.idx); ctxTgt=null; }
+function ctxOpen()     { if (!ctxTgt) return; window.open(D[ctxTgt.cat].items[ctxTgt.idx].url,'_blank'); ctxTgt=null; }
+function ctxCopy()     { if (!ctxTgt) return; navigator.clipboard.writeText(D[ctxTgt.cat].items[ctxTgt.idx].url).then(()=>toast('URL copied ✓','success')); ctxTgt=null; }
+function ctxCopyName() { if (!ctxTgt) return; navigator.clipboard.writeText(D[ctxTgt.cat].items[ctxTgt.idx].name).then(()=>toast('Name copied ✓','success')); ctxTgt=null; }
+function ctxDel()      { if (!ctxTgt) return; delBm(ctxTgt.cat, ctxTgt.idx); ctxTgt=null; }
+function delBm(cat, idx) {
+    D[cat].items.splice(idx,1);
+    if (D[cat].items.length===0) delete D[cat];
+    save(); render(); toast('Deleted','success');
+}
+function ctxMove() {
+    if (!ctxTgt) return;
+    const modal = document.getElementById('moveModal');
+    const list  = document.getElementById('moveCatList');
+    list.innerHTML = '';
+    Object.keys(D).forEach(cat => {
+        if (cat === ctxTgt.cat) return;
+        list.innerHTML += `<button onclick="moveBm('${escJ(ctxTgt.cat)}',${ctxTgt.idx},'${escJ(cat)}')" class="w-full text-left flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-xl text-sm text-gray-300 transition">${D[cat].icon||'📂'} ${cat}</button>`;
+    });
+    modal.classList.remove('hidden');
+    ctxTgt = null;
+}
+function moveBm(from, idx, to) {
+    const item = D[from].items.splice(idx,1)[0];
+    if (!D[to]) return;
+    D[to].items.push(item);
+    if (D[from].items.length===0) delete D[from];
+    document.getElementById('moveModal').classList.add('hidden');
+    save(); render(); toast(`Moved to "${to}" ✓`,'success');
+}
+
+// ══════════════════════════════════════════════
+//  SETTINGS PANEL
+// ══════════════════════════════════════════════
+function openSettings()  {
+    document.getElementById('spEl').classList.add('open');
+    document.getElementById('spOv').style.opacity = '1';
+    document.getElementById('spOv').style.pointerEvents = 'auto';
+    document.getElementById('spEl').parentElement.style.pointerEvents = 'auto';
+    renderCatList(); updateCount();
+}
+function closeSettings() {
+    document.getElementById('spEl').classList.remove('open');
+    document.getElementById('spOv').style.opacity = '0';
+    document.getElementById('spOv').style.pointerEvents = 'none';
+}
+document.getElementById('spOv').addEventListener('click', closeSettings);
+
+// ── Background ──
+function setBg(key, el) {
+    bgImg = null;
+    document.querySelectorAll('.bg-p').forEach(p => p.classList.remove('bg-sel'));
+    el.classList.add('bg-sel');
+    document.body.classList.remove('bg-image');
+    document.body.style.backgroundImage = BG[key];
+    S.bg = {type:'preset', key}; save();
+}
+function setCustomGrad() {
+    const c1=document.getElementById('bgC1').value, c2=document.getElementById('bgC2').value;
+    const dir=document.getElementById('gradDir').value;
+    document.querySelectorAll('.bg-p').forEach(p=>p.classList.remove('bg-sel'));
+    document.body.style.backgroundImage = `linear-gradient(${dir},${c1},${c2})`;
+    document.body.classList.remove('bg-image');
+    S.bg = {type:'customGrad', c1, c2, dir}; save();
+}
+function uploadBg(e) {
+    const f = e.target.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = ev => {
+        bgImg = ev.target.result;
+        document.body.style.backgroundImage = `url(${bgImg})`;
+        document.body.classList.add('bg-image');
+        document.querySelectorAll('.bg-p').forEach(p=>p.classList.remove('bg-sel'));
+        S.bg = {type:'image'}; save();
+        toast('Background set ✓','success');
+    };
+    r.readAsDataURL(f); e.target.value='';
+}
+function setBgFit(fit, btn) {
+    document.body.style.backgroundSize = fit;
+    document.querySelectorAll('.bgfit-btn').forEach(b=>b.classList.remove('opt-act'));
+    btn.classList.add('opt-act');
+    S.bgFit = fit; save();
+}
+function clearBg() {
+    bgImg = null; localStorage.removeItem('bm3_bg');
+    document.body.classList.remove('bg-image');
+    document.body.style.backgroundImage = BG.g1;
+    document.querySelectorAll('.bg-p')[0].classList.add('bg-sel');
+    S.bg = {type:'preset',key:'g1'}; save();
+    toast('Background cleared','info');
+}
+function setOverlay(v) {
+    document.getElementById('ovVal').textContent = v+'%';
+    document.getElementById('bgOv').style.background = `rgba(0,0,0,${v/100})`;
+    S.bgOverlay = v; save();
+}
+function setBgBlur(v) {
+    document.getElementById('bgBlurVal').textContent = v+'px';
+    document.getElementById('bgOv').style.backdropFilter = v>0 ? `blur(${v}px)` : '';
+    S.bgBlur = v; save();
+}
+
+// ── Widget ──
+function setWColor() {
+    const hex = document.getElementById('wColorPick').value;
+    const op  = parseInt(document.getElementById('wOpac').value)/100;
+    document.getElementById('wOpacVal').textContent = Math.round(op*100)+'%';
+    const {r,g,b} = h2rgb(hex);
+    document.documentElement.style.setProperty('--widget-bg',`rgba(${r},${g},${b},${op})`);
+    S.wColor=hex; S.wOpac=document.getElementById('wOpac').value; save();
+}
+function setWBlur(v) {
+    document.getElementById('wBlurVal').textContent=v+'px';
+    document.documentElement.style.setProperty('--widget-blur',v+'px');
+    S.wBlur=v; save();
+}
+function setWRad(v) {
+    document.getElementById('wRadVal').textContent=v+'px';
+    document.documentElement.style.setProperty('--widget-radius',v+'px');
+    S.wRad=v; save();
+}
+function setWPad(v) {
+    document.getElementById('wPadVal').textContent=v+'px';
+    S.wPad=v; save(); renderGrid();
+}
+function setWBorder(c) {
+    document.documentElement.style.setProperty('--widget-border',c?'rgba(255,255,255,0.07)':'transparent');
+    S.wBorder=c; save();
+}
+function setWLift(c) {
+    // toggle hover lift via CSS
+    const style = document.getElementById('liftStyle') || (() => { const s=document.createElement('style'); s.id='liftStyle'; document.head.appendChild(s); return s; })();
+    style.textContent = c ? '' : '.wcard:hover { transform: none !important; }';
+    S.wLift=c; save();
+}
+
+// ── Accent ──
+function setAccent(col, hov, el) {
+    document.documentElement.style.setProperty('--accent', col);
+    document.documentElement.style.setProperty('--accent-h', hov);
+    document.querySelectorAll('.acc-dot').forEach(d=>d.classList.remove('acc-sel'));
+    el.classList.add('acc-sel');
+    document.getElementById('accCustom').value = col;
+    S.accent=col; S.accentH=hov; save();
+}
+function setAccentCustom() {
+    const c = document.getElementById('accCustom').value;
+    document.documentElement.style.setProperty('--accent', c);
+    document.documentElement.style.setProperty('--accent-h', c);
+    document.querySelectorAll('.acc-dot').forEach(d=>d.classList.remove('acc-sel'));
+    S.accent=c; S.accentH=c; save();
+}
+
+// ── Typography ──
+const FONTS = {
+    system: "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif",
+    inter:  "'Inter',sans-serif",
+    mono:   "'Courier New',Courier,monospace",
+    serif:  "Georgia,serif",
+};
+function setFont(f) { document.body.style.fontFamily = FONTS[f]||FONTS.system; S.font=f; save(); }
+function setFontSize(v, btn) {
+    document.body.style.fontSize=v;
+    document.querySelectorAll('.fs-btn').forEach(b=>b.classList.remove('opt-act'));
+    btn.classList.add('opt-act');
+    S.fontSize=v; save();
+}
+
+// ── Layout ──
+function setCols(v, btn) {
+    document.getElementById('gridEl').style.gridTemplateColumns=v;
+    document.querySelectorAll('.col-btn').forEach(b=>b.classList.remove('opt-act'));
+    btn.classList.add('opt-act');
+    S.cols=v; save();
+}
+function toggleHero(c)    { document.getElementById('heroEl').style.display=c?'':'none'; S.showHero=c; save(); }
+function toggleFavicons(c){ showFav=c; S.showFav=c; save(); renderGrid(); }
+function toggleBadge(c)   { showBadge=c; S.showBadge=c; save(); renderGrid(); }
+function toggleDesc(c)    { showDesc=c; S.showDesc=c; save(); renderGrid(); }
+function toggleTags(c)    { showTags=c; S.showTags=c; save(); renderGrid(); }
+function toggleNewTab(c)  { newTab=c; S.newTab=c; save(); renderGrid(); }
+function toggleCompact(c) { compact=c; S.compact=c; save(); renderGrid(); }
+
+// ── Themes ──
+const THEMES = {
+    dark:       { body:'linear-gradient(135deg,#1a1a2e,#0f3460)', '--widget-bg':'rgba(31,41,55,0.92)' },
+    light:      { body:'linear-gradient(135deg,#e2e8f0,#c7d2fe)', '--widget-bg':'rgba(255,255,255,0.88)', '--widget-border':'rgba(0,0,0,0.07)' },
+    github:     { body:'linear-gradient(135deg,#0d1117,#161b22)', '--widget-bg':'rgba(22,27,34,0.95)' },
+    catppuccin: { body:'linear-gradient(135deg,#1e1e2e,#313244)', '--widget-bg':'rgba(49,50,68,0.92)' },
+    hacker:     { body:'linear-gradient(135deg,#0a0a0a,#1a2a1a)', '--widget-bg':'rgba(10,20,10,0.92)', '--widget-border':'rgba(0,255,0,0.08)' },
+    nord:       { body:'linear-gradient(135deg,#2e3440,#3b4252)', '--widget-bg':'rgba(59,66,82,0.92)' },
+    dracula:    { body:'linear-gradient(135deg,#282a36,#44475a)', '--widget-bg':'rgba(40,42,54,0.92)' },
+    solarized:  { body:'linear-gradient(135deg,#002b36,#073642)', '--widget-bg':'rgba(0,43,54,0.95)' },
+};
+function applyTheme(name) {
+    const t = THEMES[name]; if (!t) return;
+    Object.entries(t).forEach(([k,v]) => {
+        if (k==='body') { document.body.style.backgroundImage=v; document.body.classList.remove('bg-image'); }
+        else document.documentElement.style.setProperty(k,v);
+    });
+    S.theme=name; save(); toast(`Theme "${name}" applied`,'info');
+}
+
+// ── Page branding ──
+function saveTitle() {
+    const title = document.getElementById('pageTitleIn').value.trim();
+    if (!title) return;
+    document.getElementById('heroTitle').textContent = title;
+    document.title = title;
+    S.pageTitle = title; save();
+    toast('Title saved ✓','success');
+}
+
+// ── Data ──
+function exportData() {
+    const payload = {bookmarks:D, settings:S, version:3, exported:new Date().toISOString()};
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));
+    a.download = `bookmarks-${new Date().toISOString().slice(0,10)}.json`;
+    a.click(); toast('Exported ✓','success');
+}
+function importData(e) {
+    const f = e.target.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = ev => {
+        try {
+            const p = JSON.parse(ev.target.result);
+            if (p.bookmarks) { D=p.bookmarks; if(p.settings){S=p.settings; applyAll();} save(); render(); toast('Imported ✓','success'); }
+            else toast('Invalid file','error');
+        } catch { toast('Parse error','error'); }
+    };
+    r.readAsText(f); e.target.value='';
+}
+function importHtmlBookmarks(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = function(e) {
+        try {
+            const html = e.target.result;
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+
+            const imported = {};
+            const existingUrls = new Set();
+
+            // collect existing URLs to avoid duplicates
+            Object.values(D).forEach(cat => {
+                cat.items.forEach(item => {
+                    if (item.url) existingUrls.add(item.url);
+                });
+            });
+
+            let added = 0;
+            let skipped = 0;
+
+            const rootDL = doc.querySelector('DL');
+
+            if (!rootDL) {
+                toast('No bookmarks found in HTML file', 'error');
+                return;
+            }
+
+            parseBookmarkDL(rootDL, 'Imported Bookmarks', imported);
+
+            Object.entries(imported).forEach(([category, items]) => {
+                if (!D[category]) {
+                    D[category] = {
+                        type: 'list',
+                        icon: getCatIcon(category),
+                        items: []
+                    };
+                }
+
+                items.forEach(item => {
+                    if (existingUrls.has(item.url)) {
+                        skipped++;
+                        return;
+                    }
+
+                    D[category].items.push(item);
+                    existingUrls.add(item.url);
+                    added++;
+                });
+            });
+
+            save();
+            render();
+
+            toast(`Imported ${added} bookmarks${skipped ? `, skipped ${skipped} duplicates` : ''} ✓`, 'success');
+
+        } catch (err) {
+            console.error(err);
+            toast('Failed to import bookmark HTML', 'error');
+        }
+    };
+
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function parseBookmarkDL(dl, currentFolder, output) {
+    const children = Array.from(dl.children);
+
+    for (let i = 0; i < children.length; i++) {
+        const child = children[i];
+
+        if (child.tagName === 'DT') {
+            const directA = Array.from(child.children).find(el => el.tagName === 'A');
+            const directH3 = Array.from(child.children).find(el => el.tagName === 'H3');
+
+            // Bookmark link
+            if (directA) {
+                const url = directA.getAttribute('href');
+                const name = directA.textContent.trim() || url;
+
+                if (!url) continue;
+
+                const iconData = directA.getAttribute('icon') || '';
+                const safeIconData = iconData.startsWith('data:image') && iconData.length < 50000 ? iconData : null;
+
+                const bookmark = {
+                    name,
+                    url,
+                    icon: '🔗',
+                    color: rColor(name),
+                    tags: ['imported'],
+                    desc: '',
+                    useFavicon: /^https?:\/\//i.test(url)
+                };
+
+                // Import small embedded browser icon if available
+                if (safeIconData) {
+                    bookmark.uploadedIcon = safeIconData;
+                    bookmark.useFavicon = false;
+                }
+
+                const category = currentFolder || 'Imported Bookmarks';
+
+                if (!output[category]) output[category] = [];
+                output[category].push(bookmark);
+            }
+
+            // Folder
+            if (directH3) {
+                const folderName = directH3.textContent.trim() || 'Imported Folder';
+
+                let nestedDL = Array.from(child.children).find(el => el.tagName === 'DL');
+
+                // Some browsers place the nested DL as the next sibling
+                if (!nestedDL && child.nextElementSibling && child.nextElementSibling.tagName === 'DL') {
+                    nestedDL = child.nextElementSibling;
+                    i++; // prevent duplicate parsing
+                }
+
+                if (nestedDL) {
+                    parseBookmarkDL(nestedDL, folderName, output);
+                }
+            }
+        }
+
+        // Fallback for unusual HTML structure
+        else if (child.tagName === 'DL') {
+            parseBookmarkDL(child, currentFolder, output);
+        }
+    }
+}
+function exportHTML() {
+    let rows = '';
+    Object.entries(D).forEach(([cat,cd]) => {
+        rows += `<h2>${cd.icon||'📂'} ${cat}</h2><ul>`;
+        cd.items.forEach(item => { rows += `<li><a href="${item.url}" target="_blank">${item.icon||''} ${item.name}</a>${item.desc?` – ${item.desc}`:''}</li>`; });
+        rows += '</ul>';
+    });
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Bookmarks</title><style>body{font-family:sans-serif;max-width:800px;margin:40px auto;padding:20px}h2{margin-top:24px}li{margin:6px 0}a{color:#6366f1}</style></head><body><h1>🔖 Bookmarks</h1>${rows}</body></html>`;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([html],{type:'text/html'}));
+    a.download = 'bookmarks.html'; a.click();
+    toast('HTML exported ✓','success');
+}
+function resetAll() {
+    if (!confirm('Reset EVERYTHING? This cannot be undone!')) return;
+    localStorage.clear(); location.reload();
+}
+
+// ══════════════════════════════════════════════
+//  APPLY ALL SAVED SETTINGS
+// ══════════════════════════════════════════════
+function applyAll() {
+    const s = S;
+
+    // ── BG ──
+    if (bgImg) {
+        document.body.style.backgroundImage = `url(${bgImg})`;
+        document.body.classList.add('bg-image');
+    } else if (s.bg) {
+        if (s.bg.type === 'preset' && BG[s.bg.key]) {
+            document.body.style.backgroundImage = BG[s.bg.key];
+            document.body.classList.remove('bg-image');
+            // re-highlight the correct preset button
+            document.querySelectorAll('.bg-p').forEach((el, i) => {
+                el.classList.toggle('bg-sel', Object.keys(BG)[i] === s.bg.key);
+            });
+        } else if (s.bg.type === 'customGrad') {
+            document.body.style.backgroundImage = `linear-gradient(${s.bg.dir || '135deg'},${s.bg.c1},${s.bg.c2})`;
+            document.body.classList.remove('bg-image');
+            document.getElementById('bgC1').value = s.bg.c1 || '#1a1a2e';
+            document.getElementById('bgC2').value = s.bg.c2 || '#0f3460';
+            if (document.getElementById('gradDir')) document.getElementById('gradDir').value = s.bg.dir || '135deg';
+        } else if (s.bg.type === 'image' && bgImg) {
+            document.body.style.backgroundImage = `url(${bgImg})`;
+            document.body.classList.add('bg-image');
+        }
+    }
+
+    // ── BG Overlay ──
+    if (s.bgOverlay !== undefined) {
+        const slider = document.getElementById('ovSlider');
+        if (slider) slider.value = s.bgOverlay;
+        document.getElementById('bgOv').style.background = `rgba(0,0,0,${s.bgOverlay / 100})`;
+        const val = document.getElementById('ovVal');
+        if (val) val.textContent = s.bgOverlay + '%';
+    }
+
+    // ── BG Blur ──
+    if (s.bgBlur !== undefined) {
+        const slider = document.getElementById('bgBlurSlider');
+        if (slider) slider.value = s.bgBlur;
+        document.getElementById('bgOv').style.backdropFilter = s.bgBlur > 0 ? `blur(${s.bgBlur}px)` : '';
+        const val = document.getElementById('bgBlurVal');
+        if (val) val.textContent = s.bgBlur + 'px';
+    }
+
+    // ── BG Fit ──
+    if (s.bgFit) {
+        document.body.style.backgroundSize = s.bgFit;
+        document.querySelectorAll('.bgfit-btn').forEach(b => {
+            b.classList.toggle('opt-act', b.textContent.trim().toLowerCase() === s.bgFit.toLowerCase());
+        });
+    }
+
+    // ── Widget Color + Opacity ──
+    if (s.wColor) {
+        document.getElementById('wColorPick').value = s.wColor;
+        const op = parseInt(s.wOpac || 92) / 100;
+        document.getElementById('wOpac').value = s.wOpac || 92;
+        document.getElementById('wOpacVal').textContent = Math.round(op * 100) + '%';
+        const { r, g, b } = h2rgb(s.wColor);
+        document.documentElement.style.setProperty('--widget-bg', `rgba(${r},${g},${b},${op})`);
+    }
+
+    // ── Widget Blur ──
+    if (s.wBlur !== undefined) {
+        document.getElementById('wBlur').value = s.wBlur;
+        document.getElementById('wBlurVal').textContent = s.wBlur + 'px';
+        document.documentElement.style.setProperty('--widget-blur', s.wBlur + 'px');
+    }
+
+    // ── Widget Radius ──
+    if (s.wRad !== undefined) {
+        document.getElementById('wRad').value = s.wRad;
+        document.getElementById('wRadVal').textContent = s.wRad + 'px';
+        document.documentElement.style.setProperty('--widget-radius', s.wRad + 'px');
+    }
+
+    // ── Widget Padding ──
+    if (s.wPad !== undefined) {
+        document.getElementById('wPad').value = s.wPad;
+        document.getElementById('wPadVal').textContent = s.wPad + 'px';
+    }
+
+    // ── Widget Border ──
+    if (s.wBorder === false) {
+        document.getElementById('wBorderTgl').checked = false;
+        document.documentElement.style.setProperty('--widget-border', 'transparent');
+    }
+
+    // ── Widget Lift ──
+    if (s.wLift === false) {
+        document.getElementById('wLiftTgl').checked = false;
+        const st = document.getElementById('liftStyle') || (() => {
+            const el = document.createElement('style');
+            el.id = 'liftStyle';
+            document.head.appendChild(el);
+            return el;
+        })();
+        st.textContent = '.wcard:hover { transform: none !important; }';
+    }
+
+    // ── Accent ──
+    if (s.accent) {
+        document.documentElement.style.setProperty('--accent', s.accent);
+        document.documentElement.style.setProperty('--accent-h', s.accentH || s.accent);
+        const picker = document.getElementById('accCustom');
+        if (picker) picker.value = s.accent;
+        document.querySelectorAll('.acc-dot').forEach(d => {
+            d.classList.toggle('acc-sel', d.style.background === s.accent);
+        });
+    }
+
+    // ── Font Family ──
+    if (s.font) {
+        const FONTS = {
+            system: "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif",
+            inter:  "'Inter',sans-serif",
+            mono:   "'Courier New',Courier,monospace",
+            serif:  "Georgia,serif",
+        };
+        document.body.style.fontFamily = FONTS[s.font] || FONTS.system;
+        const sel = document.getElementById('fontFam');
+        if (sel) sel.value = s.font;
+    }
+
+    // ── Font Size ──
+    if (s.fontSize) {
+        document.body.style.fontSize = s.fontSize;
+        document.querySelectorAll('.fs-btn').forEach(b => {
+            b.classList.toggle('opt-act', b.getAttribute('onclick') && b.getAttribute('onclick').includes(s.fontSize));
+        });
+    }
+
+    // ── Grid Columns ──
+    if (s.cols) {
+        document.getElementById('gridEl').style.gridTemplateColumns = s.cols;
+        document.querySelectorAll('.col-btn').forEach(b => {
+            b.classList.toggle('opt-act', b.getAttribute('onclick') && b.getAttribute('onclick').includes(s.cols.replace(/,/g, ',').trim()));
+        });
+    }
+
+    // ── Toggles ──
+    if (s.showHero === false) {
+        document.getElementById('heroEl').style.display = 'none';
+        document.getElementById('heroTgl').checked = false;
+    }
+    if (s.showFav === false) {
+        showFav = false;
+        document.getElementById('favTgl').checked = false;
+    }
+    if (s.showBadge === false) {
+        showBadge = false;
+        document.getElementById('badgeTgl').checked = false;
+    }
+    if (s.showDesc === false) {
+        showDesc = false;
+        document.getElementById('descTgl').checked = false;
+    }
+    if (s.showTags === false) {
+        showTags = false;
+        document.getElementById('tagsTgl').checked = false;
+    }
+    if (s.newTab === false) {
+        newTab = false;
+        document.getElementById('newTabTgl').checked = false;
+    }
+    if (s.compact === true) {
+        compact = true;
+        document.getElementById('compactTgl').checked = true;
+    }
+
+    // ── Page Branding ──
+    if (s.pageTitle) {
+        document.getElementById('heroTitle').textContent = s.pageTitle;
+        document.title = s.pageTitle;
+        const inp = document.getElementById('pageTitleIn');
+        if (inp) inp.value = s.pageTitle;
+    }
+    if (s.heroEmoji) {
+        document.getElementById('heroEmoji').textContent = s.heroEmoji;
+        const brandEl = document.getElementById('heroBrandEmoji');
+        if (brandEl) brandEl.textContent = s.heroEmoji;
+    }
+
+    // ── Search Engine ──
+    if (s.eng) {
+        eng = s.eng;
+        document.getElementById('engBtn').textContent = eng.icon;
+    }
+
+    // ── Theme (apply theme vars last so they don't get overridden) ──
+    if (s.theme && THEMES[s.theme]) {
+        const t = THEMES[s.theme];
+        Object.entries(t).forEach(([k, v]) => {
+            if (k === 'body') {
+                // only apply theme bg if no custom bg is set
+                if (!s.bg || s.bg.type === 'preset') {
+                    document.body.style.backgroundImage = v;
+                }
+            } else {
+                document.documentElement.style.setProperty(k, v);
+            }
+        });
+    }
+}
+
+// ══════════════════════════════════════════════
+//  TOAST
+// ══════════════════════════════════════════════
+function toast(msg, type='info') {
+    const el = document.createElement('div');
+    const bdr = {success:'border-l-green-500',error:'border-l-red-500',info:'border-l-[var(--accent)]'}[type]||'border-l-[var(--accent)]';
+    const ico = {success:'✅',error:'❌',info:'ℹ️'}[type]||'ℹ️';
+    el.className = `flex items-center gap-2.5 bg-gray-900 border border-gray-700 ${bdr} border-l-4 rounded-xl px-4 py-2.5 text-sm text-gray-200 shadow-2xl animate-toast-in pointer-events-auto max-w-xs`;
+    el.innerHTML = `<span>${ico}</span><span>${msg}</span>`;
+    document.getElementById('toastEl').appendChild(el);
+    setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(),300); },3000);
+}
+
+// ══════════════════════════════════════════════
+//  HELPERS
+// ══════════════════════════════════════════════
+function escJ(s)     { return (s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+function getDomain(u){ try{ return new URL(u).hostname; }catch(e){ return u; } }
+function rColor(s)   { const c=['#6366f1','#ec4899','#22c55e','#f59e0b','#0ea5e9','#8b5cf6','#14b8a6','#f97316','#ef4444']; let h=0; for(let x of(s||''))h+=x.charCodeAt(0); return c[h%c.length]; }
+function getCatIcon(c){ const m={ai:'🤖',soc:'🛡️',security:'🔐',privacy:'🕵️',search:'🔍',education:'🎓',tools:'🔧',telegram:'📲',news:'📰',blog:'📝',reading:'📖',social:'💬',vendor:'🏢'}; const l=(c||'').toLowerCase(); for(const[k,v]of Object.entries(m)){if(l.includes(k))return v;} return '📂'; }
+function h2rgb(h)    { return { r:parseInt(h.slice(1,3),16), g:parseInt(h.slice(3,5),16), b:parseInt(h.slice(5,7),16) }; }
+
+// ══════════════════════════════════════════════
+//  KEYBOARD SHORTCUTS
+// ══════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+    if ((e.ctrlKey||e.metaKey) && e.key==='k') { e.preventDefault(); openCmdPalette(); }
+    if ((e.ctrlKey||e.metaKey) && e.key==='b') { e.preventDefault(); openAddModal(); }
+    if (e.key==='Escape') {
+        closeCmdPalette(); closeBmModal(); closeSettings(); closeCatModal();
+        document.getElementById('ctxMenu').classList.add('hidden');
+        document.getElementById('moveModal').classList.add('hidden');
+    }
+});
+
+document.addEventListener('click', () => {
+    document.getElementById('ctxMenu').classList.add('hidden');
+    document.getElementById('engMenu').classList.add('hidden');
+});
+
+document.getElementById('bmModal').addEventListener('click',  e => { if(e.target===document.getElementById('bmModal'))  closeBmModal();  });
+document.getElementById('catModal').addEventListener('click', e => { if(e.target===document.getElementById('catModal')) closeCatModal(); });
+
+// ══════════════════════════════════════════════
+//  START
+// ══════════════════════════════════════════════
+init();
+</script>
+</body>
+</html>
