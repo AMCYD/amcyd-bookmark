@@ -1,2 +1,3 @@
 # Browser Bookmarks
-https://amcyd.github.io/amcyd-bookmark/
+ open websit here:
+ https://amcyd.github.io/amcyd-bookmark/
