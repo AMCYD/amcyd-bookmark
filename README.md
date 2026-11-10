@@ -1,15 +1,3 @@
-## Cybersecurity Browser Bookmarks
-Open website here:
- https://amcyd.github.io/amcyd-bookmark/
-
-
- This project isn’t just a static link list—it’s an **interactive browser startpage and bookmark dashboard** (Bookmarks VantGate) built as a client-side web application. It features real-time search, multi-engine routing, custom themes, and JSON/HTML import-export tools.
-
-The `README.md` below matches a focused dashboard project rather than an overblown directory, highlighting its live demo, feature set, keyboard shortcuts, and simple deployment steps.
-
----
-
-```markdown
 # 🔖 Bookmarks VantGate
 
 A sleek, lightweight, client-side startpage and bookmark manager tailored for cybersecurity analysts, penetration testers, and tech tinkerers.
@@ -64,57 +52,3 @@ No build tools, Node modules, or servers required.
    ```bash
    git clone [https://github.com/amcyd/amcyd-bookmark.git](https://github.com/amcyd/amcyd-bookmark.git)
    cd amcyd-bookmark
-
-```
-
-2. **Open in browser:**
-Double-click `index.html` or serve via Python:
-```bash
-python3 -m http.server 8080
-
-```
-
-
-Open `http://localhost:8080` in your browser.
-
-### Use as Your Browser Startpage
-
-1. Open your browser settings.
-2. Under **On startup** or **Home page / New windows**, select **Open a specific page**.
-3. Paste:
-```text
-[https://amcyd.github.io/amcyd-bookmark/](https://amcyd.github.io/amcyd-bookmark/)
-
-```
-
-
-
----
-
-## 💾 Backups & Sync
-
-All bookmarks, tags, categories, and theme settings live in your browser's local cache.
-
-1. Click **⚙️ Settings** (bottom corner).
-2. Go to **Data Management**.
-3. Select **Export JSON** to backup your setup, or **Import** to load bookmarks on another device or private window.
-
----
-
-## 🛠️ Built With
-
-* Vanilla HTML5, CSS3, and JavaScript
-* Native Browser Web APIs (`localStorage`, `fetch`)
-* Hosted on GitHub Pages
-
----
-
-## 📄 License
-
-This project is open-source and available under the [MIT License](https://www.google.com/search?q=LICENSE).
-
-```
-
-<FollowUp label="Want to include a pre-populated default bookmarks JSON file for first-time visitors?" query="How can I add default cybersecurity categories and bookmarks to localStorage on first launch for Bookmarks VantGate?"/>
-
-```
