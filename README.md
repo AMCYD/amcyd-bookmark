@@ -1,4 +1,4 @@
-# 🔖 Bookmarks VantGate
+# 🔖 Cyber Bookmarks
 
 A sleek, lightweight, client-side startpage and bookmark manager tailored for cybersecurity analysts, penetration testers, and tech tinkerers.
 
